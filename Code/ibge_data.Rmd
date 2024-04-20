@@ -1,0 +1,92 @@
+---
+title: "IBGE Data"
+author: "Shai Vaz"
+date: "Abril 2024"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+# Data Wrangling
+library(dplyr)
+library(tidyr)
+library(stringr)
+
+# library(readr)
+# library(zoo)
+# library(formattable)
+# library(readxl)
+
+# Graphics
+library(ggplot2)
+
+# Geographic
+library(sf)
+library(sidrar)
+library(geobr)
+```
+
+# Data Acquisition
+
+## Legal Amazon
+
+We define states and municipalities in the Legal Amazon. All municipalities in the states are part of the LA, except for Maranhão, where only those left of the 14th meridian are considered. 
+
+
+```{r}
+amazon_states = c(
+  11:17, #North
+  21, #Maranhão
+  51 #Mato Grosso
+  )
+```
+
+
+```{r}
+# Amazon Multipoligon
+amazon_pol <- read_amazon(year = 2012, simplified = FALSE, showProgress = FALSE) 
+```
+
+## PPM Data (Sidra)
+
+Cattle stock by municipality, from 2000 to 2022.
+
+```{r}
+ppm <- get_sidra(
+  x = 3939, # Efetivo dos rebanhos, por tipo de rebanho
+  variable = 105,  # Efetivo dos rebanhos (Cabeças)
+  period = as.character(2001:2022),
+  classific = list("C79"), # Tipo de rebanho:
+  category = list(2670), #Bovinos
+  format = 4, # códigos e descrição
+  geo = "City", # detalhe espacial
+  geo.filter = list("State" = amazon_states)
+  )
+```
+
+Cleaning data.
+
+```{r}
+cattle_heads_ppm <- ppm %>% 
+  select(
+    "Valor",
+    "Município (Código)",
+    "Município",
+    "Ano"
+  ) %>% 
+  rename(
+    cattle_heads = "Valor",
+    city_code = "Município (Código)",
+    city = "Município",
+    year = "Ano"
+  ) %>% 
+  mutate(
+    state = str_split_i(city, " - ", 2),
+    state_code = str_sub(city_code, start = 1, end = 2),
+    city = str_split_i(city, " - ", 1)
+  ) %>% 
+  relocate(year, city, city_code, state, state_code, cattle_heads)
+```
