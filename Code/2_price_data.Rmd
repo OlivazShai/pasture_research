@@ -1,0 +1,30 @@
+---
+title: "Price Data"
+author: "Shai Vaz"
+date: "Abril 2024"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+# Data Wrangling
+library(dplyr)
+library(tidyr)
+library(stringr)
+
+# library(readr)
+# library(zoo)
+# library(formattable)
+# library(readxl)
+
+# Graphics
+library(ggplot2)
+
+# Geographic
+library(sf)
+library(sidrar)
+library(geobr)
+```
