@@ -1,7 +1,7 @@
 ---
 title: "Price Data"
 author: "Shai Vaz"
-date: "Abril 2024"
+date: "May 2024"
 output: pdf_document
 ---
 
@@ -15,16 +15,11 @@ library(dplyr)
 library(tidyr)
 library(stringr)
 
-# library(readr)
-# library(zoo)
-# library(formattable)
-# library(readxl)
-
 # Graphics
 library(ggplot2)
 
 # Geographic
 library(sf)
-library(sidrar)
 library(geobr)
 ```
+
