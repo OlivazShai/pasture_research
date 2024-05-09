@@ -28,7 +28,7 @@ library(geobr)
 a <- cattle_sales_census %>%
   replace(is.na(.), 0) %>% 
   mutate(
-    total_heads_sold = heads_sold_small 
+    total_heads_sold =  heads_sold_small 
     + heads_sold_big_breed
     + heads_sold_big_finish
     + heads_sold_big_slaughter,
@@ -42,6 +42,12 @@ a <- cattle_sales_census %>%
   ) %>% 
   drop_na(average_price)
 
+```
+
+
+```{r}
+print("only big")
+summary(a$average_price)
 ```
 
 ```{r}
