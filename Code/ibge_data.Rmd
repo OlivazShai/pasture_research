@@ -90,3 +90,119 @@ cattle_heads_ppm <- ppm %>%
   ) %>% 
   relocate(year, city, city_code, state, state_code, cattle_heads)
 ```
+
+### Generate RDS
+
+```{r}
+saveRDS(
+  cattle_heads_ppm,
+  file = "../Variables/cattle_heads_ppm.rds"
+  )
+```
+
+
+## Census Data (Sidra)
+
+```{r}
+census_variables = c(
+    # Discriminated by farm size (in heads) and finality
+
+    9521, # Cattle heads - small farms (<50h)
+    9523, # Sold heads - small farms
+    9743, # Sale value - small farms
+
+    2059, # Cattle heads - big farms (>50h)
+
+    9525, # Breeding stock sold - big farms 
+    9745, # Sale value Br.St. - big farms
+
+    9527, # Sold for finishing - big farms 
+    9747, # Sale value for finishing - big farms 
+
+    9529, # Sold for slaughter - big farms
+    9749 # Sale value for slaughter - big farms  
+    )
+
+census_names = c(
+  "cattle_heads_small",
+  "heads_sold_small",
+  "sales_value_small",
+  
+  "cattle_heads_big",
+  "heads_sold_big_breed",
+  "sales_value_big_breed",
+  
+  "heads_sold_big_finish",
+  "sales_value_big_finish",
+  
+  "heads_sold_big_slaughter",
+  "sales_value_big_slaughter"
+)
+```
+
+```{r}
+for (i in 1:10) {
+  census_name_i = census_names[i]
+  census_variable_i = census_variables[i]
+  print(i)
+  
+  census_i <- get_sidra(
+    x = 6910, # Cattle headcounts and sales
+    variable = census_variable_i,
+    classific = "c829", # Tipology
+    category = list("46302"), # Only return totals
+    geo = "City", # Municipality level data
+    format = 3, # Names and codes for geo levels  
+    digits = "max" # Maximum digits
+  ) %>% 
+  # Cleaning
+  rename(
+    "city_code" = "Município (Código)",
+    "city" = "Município"
+  ) %>%
+  rename_with(
+    .cols = "Valor",
+    .fn = \(x) census_name_i
+  ) %>% 
+  select(
+    city,
+    city_code,
+    {{census_name_i}}
+  ) %>% 
+  mutate(
+    state = str_split_i(city, " - ", 2),
+    state_code = str_sub(city_code, start = 1, end = 2),
+    city = str_split_i(city, " - ", 1)
+  ) %>% 
+  relocate(city, city_code, state, state_code, {{census_name_i}})
+  
+  if (i == 1) {
+    cattle_sales_census = census_i
+  } else {
+    cattle_sales_census = full_join(
+      cattle_sales_census,
+      census_i,
+      by = join_by(
+        "city", "city_code", "state", "state_code"
+      )
+    )
+      
+    }
+  
+}
+
+remove(census_i, census_name_i, census_variable_i)
+
+```
+```{r}
+remove(census_names, census_variables)
+```
+
+### Generate RDS
+
+```{r}
+saveRDS(
+  cattle_sales_census,
+  file = "../Variables/cattle_sales_census.rds"
+  )
+```

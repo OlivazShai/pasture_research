@@ -1,0 +1,75 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r, include=FALSE}
+# Data Wrangling
+library(dplyr)
+library(tidyr)
+library(stringr)
+
+# library(readr)
+# library(zoo)
+# library(formattable)
+# library(readxl)
+
+# Graphics
+library(ggplot2)
+
+# Geographic
+library(sf)
+library(sidrar)
+library(geobr)
+```
+
+
+```{r}
+a <- cattle_sales_census %>%
+  replace(is.na(.), 0) %>% 
+  mutate(
+    total_heads_sold = heads_sold_small 
+    + heads_sold_big_breed
+    + heads_sold_big_finish
+    + heads_sold_big_slaughter,
+    
+    total_sales_value = sales_value_small 
+    + sales_value_big_breed
+    + sales_value_big_finish
+    + sales_value_big_slaughter,
+    
+    average_price = total_sales_value/total_heads_sold
+  ) %>% 
+  drop_na(average_price)
+
+```
+
+```{r}
+print("all")
+summary(a$average_price)
+```
+
+
+```{r}
+print("no finish")
+summary(a$average_price)
+```
+
+```{r}
+print("no finish and breed")
+summary(a$average_price)
+```
+
+```{r}
+print("only big slaughter")
+summary(a$average_price)
+```
+
+
+```{r}
+a %>% 
+  ggplot(., aes(x = average_price)) +
+  geom_histogram(fill = "lightblue", color = "black", bins = 30) +
+  labs(title = "Histogram of Data", x = "Values", y = "Frequency")
+```
+
