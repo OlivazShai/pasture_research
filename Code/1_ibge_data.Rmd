@@ -24,13 +24,13 @@ library(stringr)
 library(ggplot2)
 
 # Geographic
-library(sf)
+# library(sf)
 library(sidrar)
-library(geobr)
+# library(geobr)
 ```
 
 # Data Acquisition
-
+ 
 ## Legal Amazon
 
 We define states and municipalities in the Legal Amazon. All municipalities in the states are part of the LA, except for Maranhão, where only those left of the 14th meridian are considered. 
@@ -44,11 +44,6 @@ amazon_states = c(
   )
 ```
 
-
-```{r}
-# Amazon Multipoligon
-amazon_pol <- read_amazon(year = 2012, simplified = FALSE, showProgress = FALSE) 
-```
 
 ## PPM Data (Sidra)
 
@@ -195,7 +190,7 @@ remove(census_i, census_name_i, census_variable_i)
 
 ```
 ```{r}
-remove(census_names, census_variables)
+remove(census_names, census_variables, i)
 ```
 
 ### Generate RDS

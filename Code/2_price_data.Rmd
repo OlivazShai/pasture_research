@@ -14,6 +14,8 @@ knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
 library(tidyr)
 library(stringr)
+library(readr)
+library(readxl)
 
 # Graphics
 library(ggplot2)
@@ -23,3 +25,35 @@ library(sf)
 library(geobr)
 ```
 
+# Cattle Prices 
+
+```{r}
+prices_cattle <- read_xlsx(
+  path = "../Inputs/prices_cattle.xlsx",
+  sheet = "Plan 1",
+  col_names = c("date","price_brl","price_usd"),
+  skip = 4
+  )
+```
+
+# Soybeans Prices 
+
+```{r}
+prices_soybeans <- read_xlsx(
+  path = "../Inputs/prices_soybeans.xlsx",
+  sheet = "Plan 1",
+  col_names = c("date","price_brl","price_usd"),
+  skip = 4
+  )
+```
+
+# Cattle Prices 
+
+```{r}
+prices_maize <- read_xlsx(
+  path = "../Inputs/prices_maize.xlsx",
+  sheet = "Plan 1",
+  col_names = c("date","price_brl","price_usd"),
+  skip = 4
+  )
+```
