@@ -163,6 +163,7 @@ for (i in 1:10) {
   ) %>% 
   relocate(name_muni, code_muni, name_state, code_state, {{census_name_i}})
   
+  # Joining variables
   if (i == 1) {
     cattle_sales_census = census_i
   } else {
@@ -186,12 +187,38 @@ remove(census_i, census_name_i, census_variable_i)
 remove(census_names, census_variables, i)
 ```
 
+## 2017 Average Prices
+
+Now, I'll use census sales data to extract average cattle price per municipality. I only use sales for slaughter from large farms.
+
+```{r}
+cattle_prices_2017_census <- cattle_sales_census %>%
+  replace(
+    is.na(.), 0
+  ) %>% 
+  mutate(
+    average_price =
+      (sales_value_big_slaughter)/
+      (heads_sold_big_slaughter)
+  ) %>% 
+  drop_na(
+    average_price
+  ) %>% 
+  select(
+   code_muni,
+   name_muni,
+   code_state,
+   name_state,
+   average_price
+  )
+```
+
 ## Generate RDS
 
 ```{r}
 saveRDS(
-  cattle_sales_census,
-  file = "../Variables/cattle_sales_census.rds"
+  cattle_prices_2017_census,
+  file = "../Variables/cattle_prices_2017_census.rds"
   )
 ```
 
