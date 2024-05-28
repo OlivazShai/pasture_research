@@ -91,3 +91,7 @@ cattle_price_2017_cepea <- prices_cattle %>%
   ) %>% 
   as.numeric()
 ```
+
+## Yearly prices
+
+## Join Dataframes
