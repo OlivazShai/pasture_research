@@ -79,7 +79,7 @@ prices_chicken <- read_xlsx(
 Reference period for the 2017 census is *Oct 01 2016* through *Sep 30 2017*. Here I'll extract the average CEPEA price for this period.
 
 ```{r}
-cattle_price_2017_census <- prices_cattle %>% 
+cattle_price_2017_cepea <- prices_cattle %>% 
   mutate(
     date = as_date(date, format = "%d/%m/%Y")
   ) %>% 
