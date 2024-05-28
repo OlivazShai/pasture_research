@@ -8,9 +8,11 @@ output: html_notebook
 library(dplyr)
 library(tidyr)
 library(stringr)
+library(lubridate)
 
 # Graphics
 library(ggplot2)
+library(plm)
 
 # Geographic
 library(sf)
@@ -18,11 +20,23 @@ library(sidrar)
 library(geobr)
 ```
 
+# Local Prices
+
+## Small
 
 ```{r}
-a <- cattle_sales_census %>%
+a1 <- cattle_sales_census %>%
   replace(is.na(.), 0) %>% 
-  mutate(average_price = sales_value_big_slaughter/heads_sold_big_slaughter) %>% 
+  mutate(average_price =  
+           (
+            # sales_value_big_slaughter +
+            sales_value_small
+           )/
+           (
+            # heads_sold_big_slaughter +
+            heads_sold_small  
+           )
+         ) %>% 
   drop_na(average_price) 
 
 ```
@@ -35,7 +49,7 @@ summary(a$average_price)
 
 
 ```{r}
-a %>% 
+a1 %>% 
   ggplot(., aes(x = average_price)) +
   geom_histogram(fill = "grey", color = "white", bins = 30) +
   labs(title = "Local price Distribution (in R$ 1000)", 
@@ -44,5 +58,210 @@ a %>%
   theme_minimal()
 ```
 
+## Big
+
+
+```{r}
+a2 <- cattle_sales_census %>%
+  replace(is.na(.), 0) %>% 
+  mutate(average_price =  
+           (
+            sales_value_big_slaughter
+            # sales_value_small
+           )/
+           (
+            heads_sold_big_slaughter
+            # heads_sold_small  
+           )
+         ) %>% 
+  drop_na(average_price) 
+
+```
+
+
+```{r}
+print("Big slaughter")
+summary(a$average_price)
+```
+
+
+```{r}
+a2 %>% 
+  ggplot(., aes(x = average_price)) +
+  geom_histogram(fill = "grey", color = "white", bins = 30) +
+  labs(title = "Local price Distribution (in R$ 1000)", 
+       x = "Values", 
+       y = "Frequency") +
+  theme_minimal()
+```
+
+# Map of local prices
+
+## Prices from small
+
+```{r}
+b1 <- left_join(
+    
+  municipalities %>%  
+    filter(
+      code_state %in% amazon_states
+    ),
+  
+  a1 %>% 
+    select(
+      city_code, average_price
+    ),
+  
+  by = c("code_muni" = "city_code")
+)
+
+ggplot() +
+  geom_sf(
+    data = b1,
+    aes(
+      geometry = geom,
+      fill = average_price
+      ),
+    color= NA, size=.15
+    ) +
+  scale_fill_distiller(
+    palette = "Greens", direction = 1, 
+    name='Average Price'
+    ) +
+  theme_minimal() +
+  theme(
+    axis.title=element_blank(),
+    axis.text=element_blank(),
+    axis.ticks=element_blank()
+    )
+
+```
+## Prices from big
+
+```{r}
+b2 <- left_join(
+    
+  municipalities %>%  
+    filter(
+      code_state %in% amazon_states
+    ),
+  
+  a2 %>% 
+    select(
+      city_code, average_price
+    ),
+  
+  by = c("code_muni" = "city_code")
+)
+
+ggplot() +
+  geom_sf(
+    data = b2,
+    aes(
+      geometry = geom,
+      fill = average_price
+      ),
+    color= NA, size=.15
+    ) +
+  scale_fill_distiller(
+    palette = "Greens", direction = 1, 
+    name='Average Price'
+    ) +
+  theme_minimal() +
+  theme(
+    axis.title=element_blank(),
+    axis.text=element_blank(),
+    axis.ticks=element_blank()
+    )
+
+```
+
+# Cattle prices
+
+```{r}
+ypc <- prices_cattle %>% 
+  mutate(
+    date = as_date(date, format = "%d/%m/%Y")
+  ) %>% 
+  group_by( 
+    year = year(date)
+  ) %>% 
+  summarise(
+    price = mean(price_brl)
+  )
+```
+
+```{r}
+p_2017 <- ypc %>% 
+  filter(year == 2017) %>% 
+  select(price) %>% 
+  as.numeric()
+```
+
+```{r}
+y <-  inner_join(
+  b2 %>% 
+    drop_na(average_price),
+  
+  cattle_heads_ppm %>% 
+    drop_na(cattle_heads) %>% 
+    select(
+      year, city_code, cattle_heads
+    ),
+  
+  by = c("code_muni" = "city_code")
+  ) %>% 
+  mutate(
+    year = as.numeric(year),
+    muni_state = paste0(name_muni, "-", abbrev_state),
+    name_muni = as.factor(muni_state),
+    abbrev_state = as.factor(abbrev_state)
+  ) %>% 
+  left_join(
+    ypc,
+    by = "year"
+  ) %>% 
+  mutate(
+    local_price = price * average_price*1000 / p_2017
+  ) %>% 
+  select(
+    muni_state,
+    abbrev_state,
+    year,
+    cattle_heads,
+    local_price
+  ) %>% 
+  filter(
+    year >= 2005
+  ) 
+```
+
+# Regression
+
+```{r}
+y_panel <- pdata.frame(
+  y, 
+  index=c("muni_state","year"),
+  drop.index=FALSE, 
+  row.names=TRUE)
+```
+
+```{r}
+model <- plm(
+  cattle_heads ~ local_price + lag(local_price, 1) | lag(local_price, 1:2) ,
+  data = y_panel,
+  model = "within",
+  effect = "individual"
+  )
+
+summary(model)
+```
+
+```{r}
+delta = 1/as.vector(model$coefficients)[2]*1/0.9
+phi = - delta * as.vector(model$coefficients)[1]
+
+print(phi)
+```
 
 

@@ -26,7 +26,7 @@ library(ggplot2)
 # Geographic
 # library(sf)
 library(sidrar)
-# library(geobr)
+library(geobr)
 ```
 
 # Data Acquisition
@@ -201,3 +201,15 @@ saveRDS(
   file = "../Variables/cattle_sales_census.rds"
   )
 ```
+
+## Geographic files
+
+```{r}
+municipalities <- read_municipality(
+  code_muni="all", 
+  year=2017) %>% 
+  mutate(
+    code_muni = as.character(code_muni)
+  )
+```
+
