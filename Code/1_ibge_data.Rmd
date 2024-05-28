@@ -15,11 +15,6 @@ library(dplyr)
 library(tidyr)
 library(stringr)
 
-# library(readr)
-# library(zoo)
-# library(formattable)
-# library(readxl)
-
 # Graphics
 library(ggplot2)
 
@@ -29,12 +24,9 @@ library(sidrar)
 library(geobr)
 ```
 
-# Data Acquisition
- 
-## Legal Amazon
+# Legal Amazon
 
-We define states and municipalities in the Legal Amazon. All municipalities in the states are part of the LA, except for Maranhão, where only those left of the 14th meridian are considered. 
-
+We define states and municipalities in the Legal Amazon. All municipalities in the states are part of the LA, except for Maranhão, where only those left of the 14th meridian are considered.
 
 ```{r}
 amazon_states = c(
@@ -44,8 +36,7 @@ amazon_states = c(
   )
 ```
 
-
-## PPM Data (Sidra)
+# PPM Data (Sidra)
 
 Cattle stock by municipality, from 2000 to 2022.
 
@@ -74,19 +65,19 @@ cattle_heads_ppm <- ppm %>%
   ) %>% 
   rename(
     cattle_heads = "Valor",
-    city_code = "Município (Código)",
-    city = "Município",
+    code_muni = "Município (Código)",
+    name_muni = "Município",
     year = "Ano"
   ) %>% 
   mutate(
-    state = str_split_i(city, " - ", 2),
-    state_code = str_sub(city_code, start = 1, end = 2),
-    city = str_split_i(city, " - ", 1)
+    name_state = str_split_i(name_muni, " - ", 2),
+    code_state = str_sub(code_muni, start = 1, end = 2),
+    name_muni = str_split_i(name_muni, " - ", 1)
   ) %>% 
-  relocate(year, city, city_code, state, state_code, cattle_heads)
+  relocate(year, code_muni, name_muni, code_state, name_state, cattle_heads)
 ```
 
-### Generate RDS
+## Generate RDS
 
 ```{r}
 saveRDS(
@@ -95,8 +86,9 @@ saveRDS(
   )
 ```
 
+# Census Data (Sidra)
 
-## Census Data (Sidra)
+## 2017 Census data
 
 ```{r}
 census_variables = c(
@@ -152,24 +144,24 @@ for (i in 1:10) {
   ) %>% 
   # Cleaning
   rename(
-    "city_code" = "Município (Código)",
-    "city" = "Município"
+    "code_muni" = "Município (Código)",
+    "name_muni" = "Município"
   ) %>%
   rename_with(
     .cols = "Valor",
     .fn = \(x) census_name_i
   ) %>% 
   select(
-    city,
-    city_code,
+    name_muni,
+    code_muni,
     {{census_name_i}}
   ) %>% 
   mutate(
-    state = str_split_i(city, " - ", 2),
-    state_code = str_sub(city_code, start = 1, end = 2),
-    city = str_split_i(city, " - ", 1)
+    name_state = str_split_i(name_muni, " - ", 2),
+    code_state = str_sub(code_muni, start = 1, end = 2),
+    name_muni = str_split_i(name_muni, " - ", 1)
   ) %>% 
-  relocate(city, city_code, state, state_code, {{census_name_i}})
+  relocate(name_muni, code_muni, name_state, code_state, {{census_name_i}})
   
   if (i == 1) {
     cattle_sales_census = census_i
@@ -178,7 +170,7 @@ for (i in 1:10) {
       cattle_sales_census,
       census_i,
       by = join_by(
-        "city", "city_code", "state", "state_code"
+        "name_muni", "code_muni", "name_state", "code_state"
       )
     )
       
@@ -189,11 +181,12 @@ for (i in 1:10) {
 remove(census_i, census_name_i, census_variable_i)
 
 ```
+
 ```{r}
 remove(census_names, census_variables, i)
 ```
 
-### Generate RDS
+## Generate RDS
 
 ```{r}
 saveRDS(
@@ -202,7 +195,7 @@ saveRDS(
   )
 ```
 
-## Geographic files
+# Geographic files
 
 ```{r}
 municipalities <- read_municipality(
@@ -212,4 +205,3 @@ municipalities <- read_municipality(
     code_muni = as.character(code_muni)
   )
 ```
-
