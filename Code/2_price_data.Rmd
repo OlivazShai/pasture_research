@@ -1,5 +1,5 @@
 ---
-title: "Price Data"
+title: "Price Data from CEPEA"
 author: "Shai Vaz"
 date: "May 2024"
 output: pdf_document
@@ -57,3 +57,17 @@ prices_maize <- read_xlsx(
   skip = 4
   )
 ```
+
+# Chicken prices
+
+```{r}
+prices_chicken <- read_xlsx(
+  path = "../Inputs/prices_chicken.xlsx",
+  sheet = "Plan 1",
+  col_names = c("date","price_brl","price_usd"),
+  skip = 4
+  )
+```
+
+
+
