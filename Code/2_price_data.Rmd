@@ -50,7 +50,7 @@ prices_soybeans <- read_xlsx(
   )
 ```
 
-## Cattle Prices
+## Maize Prices
 
 ```{r}
 prices_maize <- read_xlsx(
@@ -92,6 +92,78 @@ cattle_price_2017_cepea <- prices_cattle %>%
   as.numeric()
 ```
 
-## Yearly prices
-
 ## Join Dataframes
+
+```{r}
+national_prices <- full_join(
+  # Yearly cattle prices
+  prices_cattle %>% 
+    mutate(
+      date = as_date(date, format = "%d/%m/%Y")
+    ) %>% 
+    group_by( 
+      year = year(date)
+    ) %>% 
+    summarise(
+      cattle_price = mean(price_brl)
+    ),
+  # Yearly soybean prices
+  prices_soybeans %>% 
+    mutate(
+      date = as_date(date, format = "%d/%m/%Y")
+    ) %>% 
+    group_by( 
+      year = year(date)
+    ) %>% 
+    summarise(
+      soy_price = mean(price_brl)
+    ),
+  
+  by = "year"
+  ) %>% 
+  full_join(
+  # Yearly maize prices
+  prices_maize %>% 
+    mutate(
+      date = as_date(date, format = "%d/%m/%Y")
+    ) %>% 
+    group_by( 
+      year = year(date)
+    ) %>% 
+    summarise(
+      maize_price = mean(price_brl)
+    ),
+  by = "year"
+  ) %>% 
+  full_join(
+  # Yearly chicken prices
+  prices_chicken %>% 
+    mutate(
+      date = as_date(date, format = "%d/%m/%Y")
+    ) %>% 
+    group_by( 
+      year = year(date)
+    ) %>% 
+    summarise(
+      chicken_price = mean(price_brl)
+    ),
+  by = "year"
+  )
+```
+
+## Generate RDSs
+
+```{r}
+write_rds(
+  national_prices,
+  file = "../Variables/national_prices.rds"
+)
+```
+
+
+```{r}
+write_rds(
+  cattle_price_2017_cepea,
+  file = "../Variables/cattle_price_2017_cepea.rds"
+)
+```
