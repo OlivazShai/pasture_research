@@ -224,11 +224,36 @@ saveRDS(
 
 # Geographic files
 
+## Municipality polygons
+
 ```{r}
 municipalities <- read_municipality(
-  code_muni="all", 
-  year=2017) %>% 
+  code_muni = "all", 
+  year = 2017
+  ) %>% 
   mutate(
     code_muni = as.character(code_muni)
   )
 ```
+
+## Municipality Seats
+
+```{r}
+muni_seats <- read_municipal_seat(
+  year=2010
+  ) %>% 
+  mutate(
+    code_muni = as.character(code_muni)
+  )
+```
+
+
+## Generate RDSs
+
+```{r}
+write_rds(
+  muni_seats,
+  file = "../Variables/muni_seats.rds"
+)
+```
+
