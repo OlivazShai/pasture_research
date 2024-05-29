@@ -51,23 +51,65 @@ municipalities_tc <- read_rds(
 
 ## Conservation Units
 
+There are two groups of Conservation Units. Integral Protection (PI) areas have the objective of preserving nature, with only the indirect use of its natural resources being permitted. Sustainable Use (US) areas have the aim of reconciling nature conservation with sustainable use of natural resources. 
+
+```{r}
+conservation_units_tc <- read_rds(
+  file = "../Variables/conservation_units.rds"
+  ) %>%
+  # filter only Integral Protection
+  filter(
+    group == "PI"
+  ) %>% 
+  # match crs with raster
+  st_transform(
+    crs(transport_cost)
+  ) %>%
+  # save with terra
+  vect()
+```
 
 
 ## Indigenous Lands
 
+```{r}
+indigenous_lands_tc <- read_rds(
+  file = "../Variables/indigenous_lands.rds"
+  ) %>%
+  # match crs with raster
+  st_transform(
+    crs(transport_cost)
+  ) %>%
+  # save with terra
+  vect()
+```
 
+# Transportation costs per municipality
 
-# Removing protected areas
+## Removing protected areas
 
 Here I'll remove conservation units and indigenous lands from the cost raster.
 
+```{r}
+transport_cost_unprotected <- transport_cost %>% 
+  # cut conservation units
+  mask(
+    conservation_units_tc, 
+    inverse = TRUE
+  ) %>% 
+  # cut indigenous lands
+  mask(
+    indigenous_lands_tc, 
+    inverse = TRUE
+  )
+```
 
-# Masking TC by municipality
+## Masking raster
 
 ```{r}
 transport_cost_muni <- extract(
   # extract from raster
-  transport_cost, 
+  transport_cost_unprotected, 
   municipalities_tc, 
   fun = mean, 
   na.rm = TRUE,
@@ -107,7 +149,7 @@ ggplot() +
     axis.ticks=element_blank()
     )
 ```
-# Generate RDS
+## Generate RDS
 
 ```{r}
 write_rds(
@@ -115,4 +157,7 @@ write_rds(
   file = "../Variables/transport_cost_muni.rds"
 )
 ```
+
+# Distance to slaughterhouses
+
 

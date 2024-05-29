@@ -214,7 +214,15 @@ cattle_prices_2017_census <- cattle_sales_census %>%
   )
 ```
 
-## Generate RDS
+## Generate RDSs
+
+```{r}
+write_rds(
+  cattle_sales_census,
+  file = "../Variables/cattle_sales_census.rds"
+  )
+```
+
 
 ```{r}
 saveRDS(
@@ -236,17 +244,6 @@ municipalities <- read_municipality(
   mutate(
     code_muni = as.character(code_muni)
   )
-```
-
-## Municipality Seats
-
-```{r}
-# muni_seats <- read_municipal_seat(
-#   year=2010
-#   ) %>% 
-#   mutate(
-#     code_muni = as.character(code_muni)
-#   )
 ```
 
 ## Conservation Units
