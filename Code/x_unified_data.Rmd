@@ -9,4 +9,24 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## 
+```{r, include=FALSE}
+# Data Wrangling
+library(dplyr)
+library(readr)
+library(tidyr)
+library(stringr)
+library(readxl)
+
+# Graphics
+library(ggplot2)
+
+# Geographic
+library(sf)
+```
+
+# Importing file
+
+```{r}
+
+```
+
