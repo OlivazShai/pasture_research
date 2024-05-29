@@ -69,7 +69,8 @@ pasture_cover <- land_cover %>%
 
 ```{r}
 write_rds(
-  pasture_cover
-)
+  pasture_cover,
+  file = "../Variables/pasture_cover.rds"
+  )
 ```
 
