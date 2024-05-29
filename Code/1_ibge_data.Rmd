@@ -230,7 +230,8 @@ saveRDS(
 ```{r}
 municipalities <- read_municipality(
   code_muni = "all", 
-  year = 2017
+  year = 2017,
+  simplified = FALSE
   ) %>% 
   mutate(
     code_muni = as.character(code_muni)
@@ -248,6 +249,25 @@ municipalities <- read_municipality(
 #   )
 ```
 
+## Conservation Units
+
+```{r}
+conservation_units <- read_conservation_units(
+  date = 201909,
+  simplified = FALSE
+  )
+```
+
+
+## Indigenous Lands
+
+```{r}
+indigenous_lands <- read_indigenous_land(
+  date = 201907,
+  simplified = FALSE
+)
+```
+
 
 ## Generate RDSs
 
@@ -255,6 +275,20 @@ municipalities <- read_municipality(
 write_rds(
   municipalities,
   file = "../Variables/municipalities.rds"
+)
+```
+
+```{r}
+write_rds(
+  conservation_units,
+  file = "../Variables/conservation_units.rds"
+)
+```
+
+```{r}
+write_rds(
+  indigenous_lands,
+  file = "../Variables/indigenous_lands.rds"
 )
 ```
 
