@@ -18,9 +18,6 @@ library(readr)
 library(readxl)
 library(lubridate)
 
-# Graphics
-library(ggplot2)
-
 # Geographic
 library(sf)
 library(geobr)
