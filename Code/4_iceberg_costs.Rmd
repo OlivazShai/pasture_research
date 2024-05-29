@@ -9,3 +9,57 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r, include=FALSE}
+# Data Wrangling
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(readxl)
+
+# Graphics
+library(ggplot2)
+
+# Geographic
+library(sf)
+library(terra)
+```
+
+# Importing
+
+## Transportation Costs
+
+```{r}
+transport_cost <- rast(
+  x = "../Inputs/cost_raster_raster_proj.tif"
+)
+```
+
+## Municipality Seats
+
+```{r}
+municipalities_tc <- read_rds(
+  file = "../Variables/municipalities.rds"
+  ) %>%
+  # match crs with raster
+  st_transform(
+    crs(transport_cost)
+  ) %>%
+  # save with terra
+  vect()
+```
+
+
+# Masking TC by municipality
+
+```{r}
+extracted_means <- extract(
+  transport_cost, 
+  municipalities_tc, 
+  fun = mean, 
+  na.rm = TRUE,
+  touches = TRUE,
+  bind = TRUE)
+```
+
+
+
