@@ -8,3 +8,68 @@ output: pdf_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
+```{r, include=FALSE}
+# Data Wrangling
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(readxl)
+
+# Graphics
+library(ggplot2)
+
+# Geographic
+# library(sf)
+```
+
+# Landcover data
+
+## Raw dataframe
+
+```{r}
+land_cover <- read_xlsx(
+  path = "../Inputs/mapbiomas_land_cover.xlsx",
+  sheet = "land_cover"
+  )
+```
+
+## Pasture cover
+
+```{r}
+pasture_cover <- land_cover %>% 
+  filter(
+    class_id == 15
+  ) %>% 
+  pivot_longer(
+    cols = as.character(1985:2022),
+    names_to = "year",
+    values_to = "pasture_cover"
+  ) %>% 
+  select(
+    year, municipality_state, biome, geocode, pasture_cover
+  ) %>% 
+  # sum landcover from all biomes in each municipality
+  group_by(
+    year, geocode, municipality_state
+  ) %>% 
+  reframe(
+    pasture_cover = sum(pasture_cover)
+  ) %>% 
+  filter(
+    year > 2000
+  ) %>% 
+  rename(
+    code_muni = geocode,
+    muni_state = municipality_state
+  )
+```
+
+# Generate RDSs
+
+```{r}
+write_rds(
+  pasture_cover
+)
+```
+
