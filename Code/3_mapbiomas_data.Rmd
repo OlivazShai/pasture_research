@@ -62,6 +62,9 @@ pasture_cover <- land_cover %>%
   rename(
     code_muni = geocode,
     muni_state = municipality_state
+  ) %>% 
+  mutate(
+    code_muni = as.character(code_muni)
   )
 ```
 

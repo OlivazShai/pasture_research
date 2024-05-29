@@ -22,11 +22,128 @@ library(ggplot2)
 
 # Geographic
 library(sf)
+
+# Statistics
+library(plm)
 ```
 
-# Importing file
+# Importing files
 
 ```{r}
+# cattle_heads_ppm
+national_prices
+cattle_prices_2017_census
+cattle_price_2017_cepea
+municipalities
+# transport_cost_muni
+# pasture_cover
+```
 
+# Intensity per municipality
+
+```{r}
+pasture_intensity <- inner_join(
+  cattle_heads_ppm,
+  
+  pasture_cover,
+  by = c("code_muni", "year")
+  ) %>% 
+  mutate(
+    intensity = cattle_heads/pasture_cover
+  )
+```
+
+```{r}
+summary(pasture_intensity$intensity)
+```
+
+# Local prices panel
+
+```{r}
+panel <- inner_join(
+  cattle_prices_2017_census %>% 
+    drop_na(average_price),
+  
+  pasture_intensity %>% 
+    drop_na(intensity) %>% 
+    select(
+      year, 
+      code_muni, 
+      muni_state, 
+      cattle_heads, 
+      pasture_cover, 
+      intensity
+    ),
+  
+  by = "code_muni"
+  ) %>% 
+  mutate(
+    year = as.numeric(year),
+    muni_state = as.factor(muni_state),
+    name_state = as.factor(name_state)
+  ) %>% 
+  left_join(
+    national_prices,
+    by = "year"
+  ) %>% 
+  mutate(
+    local_price = cattle_price*average_price*1000/cattle_price_2017_cepea,
+    chicken_price = chicken_price*1000 #in ton
+  ) %>% 
+  select(
+    year, 
+    code_muni, 
+    muni_state,
+    name_state,
+    cattle_heads, 
+    pasture_cover, 
+    intensity,
+    local_price,
+    chicken_price
+  ) %>% 
+  filter(
+    year >= 2005
+  ) 
+```
+
+## Panel Linear Model
+
+```{r}
+y <- pdata.frame(
+  panel, 
+  index=c("muni_state","year"),
+  drop.index=FALSE, 
+  row.names=TRUE)
+```
+
+First stage elasticity:
+
+```{r}
+summary(
+  lm(
+    log(log(local_price)) ~  lag(log(chicken_price)),
+    data = y
+  )
+)
+```
+
+
+
+```{r}
+model <- plm(
+  cattle_heads ~ local_price + lag(local_price, 1) + as.numeric(year)| lag(chicken_price):name_state +  lag(local_price, 1) + as.numeric(year),
+  data = y,
+  model = "within",
+  effect = "individual"
+  )
+
+summary(model)
+```
+
+```{r}
+delta = 1/as.vector(model$coefficients)[2]*1/0.9
+phi1 = - delta * as.vector(model$coefficients)[1]
+
+print(phi1)
 ```
 
