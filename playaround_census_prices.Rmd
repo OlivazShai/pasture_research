@@ -12,6 +12,10 @@ library(lubridate)
 
 # Graphics
 library(ggplot2)
+library(modelsummary)
+library(stargazer)
+
+#Statistics
 library(plm)
 
 # Geographic
@@ -41,12 +45,10 @@ a1 <- cattle_sales_census %>%
 
 ```
 
-
 ```{r}
 print("Big slaughter")
 summary(a$average_price)
 ```
-
 
 ```{r}
 a1 %>% 
@@ -59,7 +61,6 @@ a1 %>%
 ```
 
 ## Big
-
 
 ```{r}
 a2 <- cattle_sales_census %>%
@@ -78,12 +79,10 @@ a2 <- cattle_sales_census %>%
 
 ```
 
-
 ```{r}
 print("Big slaughter")
 summary(a$average_price)
 ```
-
 
 ```{r}
 a2 %>% 
@@ -136,6 +135,7 @@ ggplot() +
     )
 
 ```
+
 ## Prices from big
 
 ```{r}
@@ -174,6 +174,59 @@ ggplot() +
     axis.ticks=element_blank()
     )
 
+```
+
+# Local prices vs Transportation costs
+
+```{r}
+a <- left_join(
+  sh_distance %>%  
+    filter(
+      code_state %in% amazon_states
+    ),
+  
+  a2 %>% 
+    select(
+      city_code, average_price
+    ),
+  
+  by = c("code_muni" = "city_code")
+  ) %>% 
+  left_join(
+    transport_cost_muni %>%
+      as_tibble() %>% 
+      select(
+        code_muni, transport_cost
+      ),
+    by = join_by(code_muni)
+  ) %>% 
+  mutate(
+    transport_cost = transport_cost/1000 
+  )
+```
+
+## Regressions Sh and Tc
+
+```{r}
+m_sh <- lm(
+  data = a,
+  log(average_price) ~ log(distance_to_sh)
+)
+
+m_tc <- lm(
+  data = a,
+  log(average_price) ~ log(transport_cost)
+)
+
+m_both <- lm(
+  data = a,
+  log(average_price) ~ log(transport_cost) + log(distance_to_sh)
+)
+
+# Results
+summary(m_sh)
+summary(m_tc)
+summary(m_both)
 ```
 
 # Cattle prices
@@ -263,5 +316,3 @@ phi = - delta * as.vector(model$coefficients)[1]
 
 print(phi)
 ```
-
-

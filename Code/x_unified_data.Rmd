@@ -34,7 +34,8 @@ library(plm)
 national_prices
 cattle_prices_2017_census
 cattle_price_2017_cepea
-municipalities
+# municipalities
+sh_distance
 # transport_cost_muni
 # pasture_cover
 ```
@@ -58,6 +59,8 @@ summary(pasture_intensity$intensity)
 ```
 
 # Local prices panel
+
+Provisional!!!!
 
 ```{r}
 panel <- inner_join(
@@ -103,7 +106,16 @@ panel <- inner_join(
   ) %>% 
   filter(
     year >= 2005
-  ) 
+  ) %>% 
+  left_join(
+    sh_distance %>%
+      as_tibble() %>% 
+      select(code_muni, distance_to_sh),
+    by = "code_muni"
+  ) %>% 
+  mutate(
+    iceberg_cost = 1/distance_to_sh
+  )
 ```
 
 ## Panel Linear Model
@@ -113,50 +125,130 @@ y <- pdata.frame(
   panel, 
   index=c("muni_state","year"),
   drop.index=FALSE, 
-  row.names=TRUE)
-```
-
-First stage elasticity:
-
-```{r}
-summary(
-  lm(
-    log(log(local_price)) ~  lag(log(chicken_price)),
-    data = y
+  row.names=TRUE) %>% 
+  mutate(
+    shifter = plm::lag(chicken_price,1)*iceberg_cost
   )
-)
 ```
 
+# Regressions
+
+## First stage:
+
 ```{r}
-aaaa <- plm(
-   ~ ,
+s1 <- plm(
+  local_price ~ lag(chicken_price,1:2):iceberg_cost,
   data = y,
   model = "pool"
-)
+  )
 
-summary(aaaa)
-remove(aaaa)
+summary(s1)
 ```
 
+## Second Stage
 
+### Baseline
 
 ```{r}
-model <- plm(
-  log(cattle_heads) ~ local_price + lag(local_price, 1) + pasture_cover| lag(chicken_price) + . - local_price,
+model_1 <- plm(
+  cattle_heads ~ local_price + lag(local_price) | . - local_price + lag(chicken_price,1:2):iceberg_cost,
   data = y,
   model = "within",
   effect = "individual"
   )
 
-summary(model)
+summary(model_1)
 ```
 
 ```{r}
-delta = 1/as.vector(model$coefficients)[2]*1/0.9
-phi1 = - delta * as.vector(model$coefficients)[1]
+delta = 1/as.vector(model_1$coefficients)[2]*1/0.9
+phi1 = - delta * as.vector(model_1$coefficients)[1]
 
 print(phi1)
 ```
+
+### Controlling for pasture area
+
+```{r}
+model_2 <- plm(
+  cattle_heads ~ local_price + lag(local_price) + pasture_cover | . - local_price - pasture_cover + lag(chicken_price,1:2):iceberg_cost + lag(pasture_cover),
+  data = y,
+  model = "within",
+  effect = "individual"
+  )
+
+summary(model_2)
+```
+
+```{r}
+delta = 1/as.vector(model_2$coefficients)[2]*1/0.9
+phi1 = - delta * as.vector(model_2$coefficients)[1]
+
+print(phi1)
+```
+
+### Baseline in logs
+
+```{r}
+model_3 <- plm(
+  log(cattle_heads) ~ local_price + lag(local_price) + pasture_cover | . - local_price + lag(chicken_price,1:2):iceberg_cost,
+  data = y,
+  model = "within",
+  effect = "individual"
+  )
+
+summary(model_3)
+```
+
+```{r}
+delta = 1/as.vector(model_3$coefficients)[2]*1/0.9
+phi1 = - delta * as.vector(model_3$coefficients)[1]
+
+print(phi1)
+```
+
+### Log and time trend
+
+
+```{r}
+model_4 <- plm(
+  log(cattle_heads) ~ local_price + lag(local_price) + pasture_cover + as.numeric(year) | . - local_price + lag(chicken_price,1:2):iceberg_cost,
+  data = y,
+  model = "within",
+  effect = "individual"
+  )
+
+summary(model_4)
+```
+
+```{r}
+delta = 1/as.vector(model_4$coefficients)[2]*1/0.9
+phi1 = - delta * as.vector(model_4$coefficients)[1]
+
+print(phi1)
+```
+
+### Level, pasture and time trend
+
+
+```{r}
+model_5 <- plm(
+  cattle_heads ~ local_price + lag(local_price) + pasture_cover + as.numeric(year) | . - local_price + lag(chicken_price):iceberg_cost,
+  data = y,
+  model = "within",
+  effect = "individual"
+  )
+
+summary(model_5)
+```
+
+```{r}
+delta = 1/as.vector(model_5$coefficients)[2]*1/0.9
+phi1 = - delta * as.vector(model_5$coefficients)[1]
+
+print(phi1)
+```
+
 
 # Testing Outliers    
 
