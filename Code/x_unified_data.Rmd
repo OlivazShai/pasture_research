@@ -133,13 +133,14 @@ y <- pdata.frame(
 
 # Regressions
 
-## First stage:
+## First stage
 
 ```{r}
 s1 <- plm(
-  local_price ~ lag(chicken_price,1:2):iceberg_cost,
+  local_price ~ lag(chicken_price,1:2),
   data = y,
-  model = "pool"
+  model = "within",
+  effect = "individual"
   )
 
 summary(s1)
@@ -148,6 +149,8 @@ summary(s1)
 ## Second Stage
 
 ### Baseline
+
+* chicken price in dollar
 
 ```{r}
 model_1 <- plm(
@@ -191,7 +194,7 @@ print(phi1)
 
 ```{r}
 model_3 <- plm(
-  log(cattle_heads) ~ local_price + lag(local_price) + pasture_cover | . - local_price + lag(chicken_price,1:2):iceberg_cost,
+  log(cattle_heads) ~ local_price + lag(local_price) | . - local_price + lag(chicken_price,1:2):iceberg_cost,
   data = y,
   model = "within",
   effect = "individual"
@@ -212,7 +215,7 @@ print(phi1)
 
 ```{r}
 model_4 <- plm(
-  log(cattle_heads) ~ local_price + lag(local_price) + pasture_cover + as.numeric(year) | . - local_price + lag(chicken_price,1:2):iceberg_cost,
+  log(cattle_heads) ~ local_price + lag(local_price) + as.numeric(year) | . - local_price + lag(chicken_price,1:2):iceberg_cost,
   data = y,
   model = "within",
   effect = "individual"
@@ -233,7 +236,7 @@ print(phi1)
 
 ```{r}
 model_5 <- plm(
-  cattle_heads ~ local_price + lag(local_price) + pasture_cover + as.numeric(year) | . - local_price + lag(chicken_price):iceberg_cost,
+  cattle_heads ~ local_price + lag(local_price) + pasture_cover + as.numeric(year) | . - local_price + lag(chicken_price,1:2):iceberg_cost,
   data = y,
   model = "within",
   effect = "individual"
@@ -286,6 +289,6 @@ b <- a %>%
 
 ```{r}
 P = ecdf(a$z_score)
-(1-P(3.4))*100 + P(-3.2)*100
+(1-P(3.4))*100 + P(-3.2)*100 - 1
 ```
 

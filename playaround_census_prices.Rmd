@@ -210,12 +210,12 @@ a <- left_join(
 ```{r}
 m_sh <- lm(
   data = a,
-  log(average_price) ~ log(distance_to_sh)
+  log(average_price) ~ distance_to_sh
 )
 
 m_tc <- lm(
   data = a,
-  log(average_price) ~ log(transport_cost)
+  log(average_price) ~ transport_cost
 )
 
 m_both <- lm(

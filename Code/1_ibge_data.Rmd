@@ -265,6 +265,16 @@ indigenous_lands <- read_indigenous_land(
 )
 ```
 
+## Historically comparable municipalities (AMCs)
+
+```{r}
+amc_1991 <- read_comparable_areas(
+  start_year = 1991,
+  end_year = 2010,
+  simplified = FALSE
+)
+```
+
 
 ## Generate RDSs
 
