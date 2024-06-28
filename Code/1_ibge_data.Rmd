@@ -322,6 +322,15 @@ amc_1991 <- read_comparable_areas(
 )
 ```
 
+## Biomes
+
+```{r}
+biomes <- read_biomes(
+  year = 2019, 
+  simplified = FALSE
+)
+```
+
 
 ## Generate RDSs
 
