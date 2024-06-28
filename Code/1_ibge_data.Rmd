@@ -31,28 +31,75 @@ We define states and municipalities in the Legal Amazon. All municipalities in t
 
 ```{r}
 amazon_states = c(
-  11:17, #North
-  21, #Maranhão
-  51 #Mato Grosso
+  11:17, # Regiao Norte
+  21, # Maranhão
+  51 # Mato Grosso
   )
 ```
 
 # PPM Data (Sidra)
 
-Cattle stock by municipality, from 2000 to 2022.
+Cattle stock by municipality, from 1995 to 2022.
 
 ```{r}
 ppm <- get_sidra(
   x = 3939, # Efetivo dos rebanhos, por tipo de rebanho
   variable = 105,  # Efetivo dos rebanhos (Cabeças)
-  period = as.character(2001:2022),
+  period = as.character(1995:2022),
   classific = list("C79"), # Tipo de rebanho:
   category = list(2670), #Bovinos
   format = 4, # códigos e descrição
   geo = "City", # detalhe espacial
-  geo.filter = list("State" = amazon_states)
+  geo.filter = list("Region" = )
   )
 ```
+
+```{r}
+# Define list of geographic filters
+# Some regions need division due to data limits
+
+filter_list = list(
+  # North
+  list("Region" = 1),
+  # Northeast
+  list("State" = 21:24),
+  list("State" = 25:29),
+  # Southeast
+  list("State" = 31:32),
+  list("State" = c(33,35)),
+  # South
+  list("Region" = 4),
+  # Midwest
+  list("Region" = 5)
+)
+
+# Initialise an empty data frame to store the aggregated data
+ppm <- data.frame()
+
+# Loop through each geo filter
+
+for (filter in filter_list) {
+  
+  # Import data for the current region
+  x <- get_sidra(
+    x = 3939, # Efetivo dos rebanhos, por tipo de rebanho
+    variable = 105,  # Efetivo dos rebanhos (Cabeças)
+    period = as.character(1995:2022),
+    classific = list("C79"), # Tipo de rebanho:
+    category = list(2670), # Bovinos
+    format = 4, # códigos e descrição
+    geo = "City", # detalhe espacial
+    geo.filter = filter
+  )
+  
+  print(filter)
+  
+  # Append the data to the aggregated data frame
+  ppm <- bind_rows(ppm, x)
+}
+
+```
+
 
 Cleaning data.
 
