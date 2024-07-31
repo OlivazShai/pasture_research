@@ -54,10 +54,10 @@ pasture_cover <- land_cover %>%
     year, geocode, municipality_state
   ) %>% 
   reframe(
-    pasture_cover = sum(pasture_cover)
+    pasture_cover = sum(pasture_cover, na.rm = TRUE)
   ) %>% 
   filter(
-    year > 2000
+    year > 1995
   ) %>% 
   rename(
     code_muni = geocode,

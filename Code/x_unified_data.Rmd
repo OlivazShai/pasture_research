@@ -60,10 +60,62 @@ summary(pasture_intensity$intensity)
 
 # Local prices panel
 
-Provisional!!!!
+## Panel creation 
 
 ```{r}
-panel <- inner_join(
+panel_1 <- left_join(
+  cattle_heads_ppm %>%
+    select(year, code_muni, cattle_heads),
+  
+  municipalities_with_biomes %>% 
+    as_tibble() %>% 
+    select(-c(11)),
+  by = "code_muni"
+  ) %>% 
+  inner_join(
+  cattle_prices_2017_census %>% 
+    drop_na(average_price) %>% 
+    select(c(1,5)),
+  
+  by = "code_muni"
+  ) %>% 
+  mutate(
+    year = as.numeric(year),
+  ) %>% 
+  left_join(
+    national_prices,
+    by = "year"
+  ) %>% 
+  mutate(
+    local_price = cattle_price*average_price*1000/cattle_price_2017_cepea
+  ) %>% 
+  filter(
+    year >= 2005 
+  ) %>% 
+  left_join(
+    market_acess_by_muni %>% 
+      select(-code_amc),
+    by = c("code_muni" = "muni")
+  ) %>%
+  left_join(
+    sh_distance %>%
+      as_tibble() %>% 
+      select(code_muni, distance_to_sh),
+    by = "code_muni"
+  ) %>% 
+  mutate(
+    iceberg_cost = 1/distance_to_sh
+  ) %>% 
+  unique() %>% 
+  filter(
+    amazonia == TRUE
+  )
+```
+
+
+```{r}
+panel_2 <- 
+  inner_join(
   cattle_prices_2017_census %>% 
     drop_na(average_price),
   
@@ -77,7 +129,6 @@ panel <- inner_join(
       pasture_cover, 
       intensity
     ),
-  
   by = "code_muni"
   ) %>% 
   mutate(
@@ -115,19 +166,19 @@ panel <- inner_join(
   ) %>% 
   mutate(
     iceberg_cost = 1/distance_to_sh
-  )
+  ) 
 ```
 
 ## Panel Linear Model
 
 ```{r}
 y <- pdata.frame(
-  panel, 
-  index=c("muni_state","year"),
-  drop.index=FALSE, 
-  row.names=TRUE) %>% 
+  panel_1, 
+  index= c("code_muni","year"),
+  drop.index = FALSE, 
+  row.names = TRUE) %>% 
   mutate(
-    shifter = plm::lag(chicken_price,1)*iceberg_cost
+    shifter = plm::lag(chicken_price)*market_access_2000
   )
 ```
 
@@ -137,7 +188,7 @@ y <- pdata.frame(
 
 ```{r}
 s1 <- plm(
-  local_price ~ lag(chicken_price,1:2),
+  local_price ~ shifter,
   data = y,
   model = "within",
   effect = "individual"
@@ -150,11 +201,9 @@ summary(s1)
 
 ### Baseline
 
-* chicken price in dollar
-
 ```{r}
 model_1 <- plm(
-  cattle_heads ~ local_price + lag(local_price) | . - local_price + lag(chicken_price,1:2):iceberg_cost,
+  cattle_heads ~ local_price + lag(local_price) | . - local_price + shifter,
   data = y,
   model = "within",
   effect = "individual"
@@ -194,7 +243,7 @@ print(phi1)
 
 ```{r}
 model_3 <- plm(
-  log(cattle_heads) ~ local_price + lag(local_price) | . - local_price + lag(chicken_price,1:2):iceberg_cost,
+  log(cattle_heads) ~ local_price + lag(local_price) | . - local_price + shifter,
   data = y,
   model = "within",
   effect = "individual"
@@ -205,9 +254,9 @@ summary(model_3)
 
 ```{r}
 delta = 1/as.vector(model_3$coefficients)[2]*1/0.9
-phi1 = - delta * as.vector(model_3$coefficients)[1]
+phi1_log = - delta * as.vector(model_3$coefficients)[1]
 
-print(phi1)
+print(phi1_log)
 ```
 
 ### Log and time trend
@@ -215,7 +264,7 @@ print(phi1)
 
 ```{r}
 model_4 <- plm(
-  log(cattle_heads) ~ local_price + lag(local_price) + as.numeric(year) | . - local_price + lag(chicken_price,1:2):iceberg_cost,
+  log(cattle_heads) ~ local_price + lag(local_price) + as.numeric(year) | . - local_price + shifter,
   data = y,
   model = "within",
   effect = "individual"
@@ -231,12 +280,12 @@ phi1 = - delta * as.vector(model_4$coefficients)[1]
 print(phi1)
 ```
 
-### Level, pasture and time trend
+### Level and time trend
 
 
 ```{r}
 model_5 <- plm(
-  cattle_heads ~ local_price + lag(local_price) + pasture_cover + as.numeric(year) | . - local_price + lag(chicken_price,1:2):iceberg_cost,
+  cattle_heads ~ local_price + lag(local_price) + as.numeric(year) | . - local_price + shifter,
   data = y,
   model = "within",
   effect = "individual"
@@ -256,9 +305,8 @@ print(phi1)
 # Testing Outliers    
 
 ```{r}
-a <- panel %>% 
-  select(1:5) %>%
-  group_by(muni_state) %>% 
+a <- panel_1 %>%
+  group_by(code_muni) %>% 
   mutate(
     lag_cattle_heads = dplyr::lag(cattle_heads),
     cattle_heads = cattle_heads,
@@ -282,8 +330,8 @@ quantile(a$z_score, c(0.0001, 0.0005, 0.001, 0.999, 0.9995, 0.9999), na.rm=TRUE)
 ```{r}
 b <- a %>% 
   filter(
-     z_score < -3.2 # Novo Progresso - PA
-     | z_score > 3.4 
+     z_score < -2.898154 
+     | z_score > 3.118212
   )
 ```
 
@@ -291,4 +339,104 @@ b <- a %>%
 P = ecdf(a$z_score)
 (1-P(3.4))*100 + P(-3.2)*100 - 1
 ```
+
+### New Panel
+
+```{r}
+c <- a %>% 
+  ungroup() %>% 
+  filter(
+     z_score > -2.473873  
+     & z_score < 2.999128
+  ) 
+```
+
+```{r}
+d <- pdata.frame(
+  c, 
+  index= c("code_muni","year"),
+  drop.index = FALSE, 
+  row.names = TRUE) %>% 
+  mutate(
+    shifter = plm::lag(chicken_price)*market_access_2000
+  )
+```
+
+## Regressions
+
+## First stage
+
+```{r}
+s1_d <- plm(
+  local_price ~ shifter,
+  data = d,
+  model = "within",
+  effect = "individual"
+  )
+
+summary(s1_d)
+```
+
+## Second Stage
+
+### Baseline
+
+```{r}
+model_d <- plm(
+  cattle_heads ~ local_price + lag(local_price) | . - local_price + shifter,
+  data = d,
+  model = "within",
+  effect = "individual"
+  )
+
+summary(model_d)
+```
+# Stargazer
+
+```{r}
+library(stargazer)
+```
+
+First stage
+```{r}
+stargazer(
+  s1,
+  title = "First Stage Regression",
+  header = FALSE,
+  dep.var.labels = "Local Price",
+  covariate.labels = "Suppply Shifter Instrument"
+  )
+```
+
+And second stage:
+
+```{r}
+stargazer(
+  model_1,
+  title = "Second Stage Regression",
+  header = FALSE,
+  dep.var.labels = "Cattle heads",
+  covariate.labels = c("Local Price", "Lagged Local Price"),
+   add.lines= list(c("(1+Phi)", round(phi1,digits = 3))),
+  label = "second_stage"
+  )
+```
+
+Log baseline.
+
+
+```{r}
+stargazer(
+  model_3,
+  title = "Second Stage Regression",
+  header = FALSE,
+  dep.var.labels = "Log Cattle heads",
+  covariate.labels = c("Local Price", "Lagged Local Price"),
+   add.lines= list(c("(1+Phi)", round(phi1_log,digits = 3))),
+  label = "log_reg"
+  )
+```
+
+
+With other shifter (BRL):
 

@@ -248,4 +248,31 @@ ggplot() +
     axis.ticks=element_blank()
     )
 ```
+# Market Access
+
+```{r}
+market_access <- read_csv(
+  file = "../Inputs/Market_access.csv",
+  col_types = c("c","c","n", "n","n","l")
+  )
+```
+
+For now, we'll simply repeat data from 2000's to each municipality, using the AMCs.
+
+```{r}
+market_acess_by_muni <- left_join(
+  # AMCs in 1991 by municipalities
+  amc_1991_by_muni %>% 
+    as_tibble() %>% 
+    select(code_amc, muni),
+  # Market access by AMC
+  market_access %>% 
+    select(amc, "2000"),
+  by = join_by("code_amc" == "amc")
+  ) %>% 
+  mutate(
+    market_access_2000 = `2000`/max(`2000`, na.rm = TRUE)*100
+  ) %>% 
+  select(-c("2000"))
+```
 

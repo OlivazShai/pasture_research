@@ -20,9 +20,12 @@ library(readr)
 library(ggplot2)
 
 # Geographic
-# library(sf)
+library(sf)
 library(sidrar)
 library(geobr)
+
+# Personal functions
+source("../Functions/functions.R")
 ```
 
 # Legal Amazon
@@ -42,19 +45,6 @@ amazon_states = c(
 Cattle stock by municipality, from 1995 to 2022.
 
 ```{r}
-ppm <- get_sidra(
-  x = 3939, # Efetivo dos rebanhos, por tipo de rebanho
-  variable = 105,  # Efetivo dos rebanhos (Cabeças)
-  period = as.character(1995:2022),
-  classific = list("C79"), # Tipo de rebanho:
-  category = list(2670), #Bovinos
-  format = 4, # códigos e descrição
-  geo = "City", # detalhe espacial
-  geo.filter = list("Region" = )
-  )
-```
-
-```{r}
 # Define list of geographic filters
 # Some regions need division due to data limits
 
@@ -66,7 +56,7 @@ filter_list = list(
   list("State" = 25:29),
   # Southeast
   list("State" = 31:32),
-  list("State" = c(33,35)),
+  list("State" = c(33,35)), # there's no State 34
   # South
   list("Region" = 4),
   # Midwest
@@ -98,6 +88,7 @@ for (filter in filter_list) {
   ppm <- bind_rows(ppm, x)
 }
 
+rm(x)
 ```
 
 
@@ -123,15 +114,6 @@ cattle_heads_ppm <- ppm %>%
     name_muni = str_split_i(name_muni, " - ", 1)
   ) %>% 
   relocate(year, code_muni, name_muni, code_state, name_state, cattle_heads)
-```
-
-## Generate RDS
-
-```{r}
-saveRDS(
-  cattle_heads_ppm,
-  file = "../Variables/cattle_heads_ppm.rds"
-  )
 ```
 
 # Census Data (Sidra)
@@ -261,23 +243,6 @@ cattle_prices_2017_census <- cattle_sales_census %>%
   )
 ```
 
-## Generate RDSs
-
-```{r}
-write_rds(
-  cattle_sales_census,
-  file = "../Variables/cattle_sales_census.rds"
-  )
-```
-
-
-```{r}
-saveRDS(
-  cattle_prices_2017_census,
-  file = "../Variables/cattle_prices_2017_census.rds"
-  )
-```
-
 # Geographic files
 
 ## Municipality polygons
@@ -312,22 +277,125 @@ indigenous_lands <- read_indigenous_land(
 )
 ```
 
-## Historically comparable municipalities (AMCs)
+## AMCs - Historically comparable municipalities
 
 ```{r}
 amc_1991 <- read_comparable_areas(
   start_year = 1991,
   end_year = 2010,
   simplified = FALSE
-)
+  ) %>% 
+  select(
+    -list_name_muni_2010 # superfluous column
+  ) %>%
+  mutate(
+    code_amc = as.character(code_amc)
+  ) %>% 
+  # There's one polygon self intersecting, we need to make it valid 
+  st_make_valid()
 ```
+
+### By municipality
+
+```{r}
+amc_1991_by_muni <- amc_1991 %>% 
+  mutate(
+    muni = str_split(
+      list_code_muni_2010,
+      pattern = ","
+    )
+  ) %>%
+  select(
+    -list_code_muni_2010
+  ) %>% 
+  unnest_longer(
+    muni
+  ) 
+```
+
+
+### Municipalities cover in AMCs
+
+There are a few new municipalities which are not covered by the 2010 AMCs.
+
+```{r}
+muni_not_in_amc <- anti_join(
+    municipalities,
+    
+    amc_1991_by_muni%>% 
+      as_tibble() %>% 
+      select(1:2),
+    by = c("code_muni" = "muni")
+  )
+```
+
+Simply intersecting these municipalities with the AMCs does not work. The solution won't be simply geographical, but historical. We verify externally from which municipalities these ones split from.
+
+Work in progress!
+
+
 
 ## Biomes
 
 ```{r}
 biomes <- read_biomes(
   year = 2019, 
-  simplified = FALSE
+  # Will use simplified geometry because original resolution has 
+  # invalid unsolvable geometry for amazon, an issue has been raised.
+  # I'll improve when developers correct the issue 
+  simplified = TRUE
+  ) %>% 
+  mutate(
+    # simplify biome names
+    name_biome = name_biome %>% 
+      stringi::stri_trans_general(., "Latin-ASCII") %>% 
+      str_replace(.," ", "_") %>% 
+      str_to_lower()
+  )
+```
+
+
+### Municipalities by biome
+
+```{r}
+municipalities_with_biomes <- bind_cols(
+  municipalities,
+  
+  # intersection municipalities and biomes
+  st_intersects(
+    municipalities,
+    biomes,
+    sparse = FALSE
+  ) %>% 
+  as_tibble() %>% 
+  setNames(
+    biomes$name_biome
+  ) %>% 
+  select(
+    -sistema_costeiro
+  )
+  )
+```
+
+### AMCs with biomes
+
+```{r}
+amc_1991_with_biomes <- bind_cols(
+  amc_1991,
+  
+  # intersection AMCs and biomes
+  st_intersects(
+    amc_1991,
+    biomes,
+    sparse = FALSE
+  ) %>% 
+  as_tibble() %>% 
+  setNames(
+    biomes$name_biome
+  ) %>% 
+  select(
+    -c("Sistema Costeiro")
+  )
 )
 ```
 
@@ -335,23 +403,17 @@ biomes <- read_biomes(
 ## Generate RDSs
 
 ```{r}
-write_rds(
-  municipalities,
-  file = "../Variables/municipalities.rds"
-)
-```
-
-```{r}
-write_rds(
-  conservation_units,
-  file = "../Variables/conservation_units.rds"
-)
-```
-
-```{r}
-write_rds(
+bulk_rds(
+  cattle_heads_ppm,
+  cattle_sales_census, 
+  cattle_prices_2017_census,
+  municipalities, 
+  conservation_units, 
   indigenous_lands,
-  file = "../Variables/indigenous_lands.rds"
-)
+  amc_1991,
+  biomes
+  )
 ```
+
+
 

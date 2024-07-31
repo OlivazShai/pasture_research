@@ -19,11 +19,10 @@ library(readxl)
 library(lubridate)
 
 # Geographic
-library(sf)
-library(geobr)
+
 ```
 
-# CEPEA Data
+# CEPEA Data imports
 
 ## Cattle Prices
 
@@ -69,7 +68,7 @@ prices_chicken <- read_xlsx(
   )
 ```
 
-# Operations or whatever
+# Consolidation
 
 ## Cattle prices for 2017 census
 
@@ -102,7 +101,8 @@ national_prices <- full_join(
       year = year(date)
     ) %>% 
     summarise(
-      cattle_price = mean(price_brl)
+      cattle_price = mean(price_brl),
+      cattle_price_usd = mean(price_usd)
     ),
   # Yearly soybean prices
   prices_soybeans %>% 
@@ -113,7 +113,8 @@ national_prices <- full_join(
       year = year(date)
     ) %>% 
     summarise(
-      soy_price = mean(price_brl)
+      soy_price = mean(price_brl),
+      soy_price_usd = mean(price_usd)
     ),
   
   by = "year"
@@ -128,7 +129,8 @@ national_prices <- full_join(
       year = year(date)
     ) %>% 
     summarise(
-      maize_price = mean(price_brl)
+      maize_price = mean(price_brl),
+      maize_price_usd = mean(price_usd)
     ),
   by = "year"
   ) %>% 
@@ -142,25 +144,18 @@ national_prices <- full_join(
       year = year(date)
     ) %>% 
     summarise(
-      chicken_price = mean(price_brl)
+      chicken_price = mean(price_brl),
+      chicken_price_usd = mean(price_usd)
     ),
   by = "year"
   )
 ```
 
-## Generate RDSs
+# Generate RDSs
 
 ```{r}
-write_rds(
+bulk_rds(
   national_prices,
-  file = "../Variables/national_prices.rds"
-)
-```
-
-
-```{r}
-write_rds(
-  cattle_price_2017_cepea,
-  file = "../Variables/cattle_price_2017_cepea.rds"
-)
+  cattle_price_2017_cepea
+  )
 ```
