@@ -82,15 +82,15 @@ for (filter in filter_list) {
     geo.filter = filter
   )
   
+  # Track job
   print(filter)
   
   # Append the data to the aggregated data frame
   ppm <- bind_rows(ppm, x)
 }
 
-rm(x)
+rm(x, filter, filter_list)
 ```
-
 
 Cleaning data.
 
@@ -267,7 +267,6 @@ conservation_units <- read_conservation_units(
   )
 ```
 
-
 ## Indigenous Lands
 
 ```{r}
@@ -313,7 +312,6 @@ amc_1991_by_muni <- amc_1991 %>%
   ) 
 ```
 
-
 ### Municipalities cover in AMCs
 
 There are a few new municipalities which are not covered by the 2010 AMCs.
@@ -332,8 +330,6 @@ muni_not_in_amc <- anti_join(
 Simply intersecting these municipalities with the AMCs does not work. The solution won't be simply geographical, but historical. We verify externally from which municipalities these ones split from.
 
 Work in progress!
-
-
 
 ## Biomes
 
@@ -354,7 +350,6 @@ biomes <- read_biomes(
   )
 ```
 
-
 ### Municipalities by biome
 
 ```{r}
@@ -367,7 +362,7 @@ municipalities_with_biomes <- bind_cols(
     biomes,
     sparse = FALSE
   ) %>% 
-  as_tibble() %>% 
+  as_tibble(.name_repair="minimal") %>% 
   setNames(
     biomes$name_biome
   ) %>% 
@@ -389,16 +384,15 @@ amc_1991_with_biomes <- bind_cols(
     biomes,
     sparse = FALSE
   ) %>% 
-  as_tibble() %>% 
+  as_tibble(.name_repair="minimal") %>% 
   setNames(
     biomes$name_biome
-  ) %>% 
+  ) 
+) %>% 
   select(
-    -c("Sistema Costeiro")
+    -sistema_costeiro
   )
-)
 ```
-
 
 ## Generate RDSs
 
@@ -414,6 +408,3 @@ bulk_rds(
   biomes
   )
 ```
-
-
-
