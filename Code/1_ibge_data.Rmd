@@ -329,7 +329,24 @@ muni_not_in_amc <- anti_join(
 
 Simply intersecting these municipalities with the AMCs does not work. The solution won't be simply geographical, but historical. We verify externally from which municipalities these ones split from.
 
-Work in progress!
+Mojuí dos campos - Santarem PA:
+
+\
+Pescaria brava - Laguna SC:
+
+\
+Balneario rincão - Içara SC:
+
+\
+Lagoa dos Patos e Lagoa Mirim não existem
+
+\
+Pinto Bandeira - Bento Gonçalves RS:
+
+Paraíso das Aguas MS:\
+Água Clara = 5000203 \~ 1085\
+Costa Rica = 5003256 \~ 1103\
+Chapadão do Sul = 5002951 \~ 1107
 
 ## Biomes
 
