@@ -23,9 +23,14 @@ library(ggplot2)
 library(sf)
 library(sidrar)
 library(geobr)
+library(datazoom.amazonia)
 
 # Personal functions
 source("../Functions/functions.R")
 ```
 
 # BACI data
+
+```{r}
+
+```
