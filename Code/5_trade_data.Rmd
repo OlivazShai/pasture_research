@@ -23,14 +23,86 @@ library(ggplot2)
 library(sf)
 library(sidrar)
 library(geobr)
-library(datazoom.amazonia)
+library(datazoom.amazonia) #development version
+
 
 # Personal functions
 source("../Functions/functions.R")
 ```
 
-# BACI data
+```{r, include=FALSE, eval=FALSE}
+
+library(devtools) 
+
+# Datazoom development version
+devtools::install_github("OlivazShai/datazoom.amazonia")
+```
+
+# BACI trade data
+
+## Importing BACI data
+
+Note that I need (as per September 2024) to use the development version of the `datazoom.amazonia` package. The CRAN published version has old data which is unavailable, so I corrected the links and included the most up to date BACI files. I also corrected a faulty procedure that deterred the download of multiple years at once.
+
+Here, I download the trade data using the `datazoom.amazonia` package.
+
+Ensure there's enough memory, I follow the process in this [stackoverflow](https://stackoverflow.com/questions/51248293/error-vector-memory-exhausted-limit-reached-r-3-5-0-macos){.uri} issue.
+
+```{r, eval=FALSE}
+gc()
+library(usethis) 
+usethis::edit_r_environ() # Include R_MAX_VSIZE=100Gb
+```
 
 ```{r}
+baci_raw <- load_baci(
+  # treated data crashes, so I download raw 
+  raw_data = TRUE,
+  # to download the entire series
+  time_period = 1995:2022  
+  )
+```
 
+This process yields a list of 28 vectors, one for each year. Variables are:
+
+| Variable | Description                                        |
+|----------|----------------------------------------------------|
+| `t`      | Year                                               |
+| `k`      | Product category (HS 6-digit code)                 |
+| `i`      | Exporter (ISO 3-digit country code)                |
+| `j`      | Importer (ISO 3-digit country code)                |
+| `v`      | Value of the trade flow (in thousands current USD) |
+| `q`      | Quantity (in metric tons)                          |
+
+## Importing product and country codes
+
+Products:
+
+```{r}
+baci_product_codes <- read_csv(
+  file = "../Inputs/BACI/product_codes_HS92_V202401b.csv",
+  col_types = "c"
+)
+```
+
+Countries:
+
+```{r}
+baci_country_codes <- read_csv(
+  file = "../Inputs/BACI/country_codes_V202401b.csv",
+  col_types = "c"
+)
+```
+
+Importantly, `Brazil = 76` and `China = 156`.
+
+## Selecting products
+
+I select only bovine meat products.
+
+```{r}
+baci_bovine_meat_products <- baci_product_codes %>% 
+  filter(
+    str_detect(description,"Meat: of bovine animals")
+  ) 
 ```
