@@ -1,0 +1,31 @@
+---
+title: "Trade Data"
+author: "Shai Vaz"
+date: "September 2024"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+# Data Wrangling
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(readr)
+
+# Graphics
+library(ggplot2)
+
+# Geographic
+library(sf)
+library(sidrar)
+library(geobr)
+
+# Personal functions
+source("../Functions/functions.R")
+```
+
+# BACI data

@@ -51,7 +51,7 @@ municipalities_tc <- read_rds(
 
 ## Conservation Units
 
-There are two groups of Conservation Units. Integral Protection (PI) areas have the objective of preserving nature, with only the indirect use of its natural resources being permitted. Sustainable Use (US) areas have the aim of reconciling nature conservation with sustainable use of natural resources. 
+There are two groups of Conservation Units. Integral Protection (PI) areas have the objective of preserving nature, with only the indirect use of its natural resources being permitted. Sustainable Use (US) areas have the aim of reconciling nature conservation with sustainable use of natural resources.
 
 ```{r}
 conservation_units_tc <- read_rds(
@@ -69,7 +69,6 @@ conservation_units_tc <- read_rds(
   vect()
 ```
 
-
 ## Indigenous Lands
 
 ```{r}
@@ -86,7 +85,7 @@ indigenous_lands_tc <- read_rds(
 
 # Transportation costs per municipality
 
-I use a raster of quality adjusted transportation cost to major ports, developed by Rafael Araujo. 
+I use a raster of quality adjusted transportation cost to major ports, developed by Rafael Araujo.
 
 ## Removing protected areas
 
@@ -151,6 +150,7 @@ ggplot() +
     axis.ticks=element_blank()
     )
 ```
+
 ## Generate RDS
 
 ```{r}
@@ -207,7 +207,6 @@ ggplot() +
   )
 ```
 
-
 ```{r}
 sh_distance <-  municipalities %>%
   mutate(
@@ -228,8 +227,6 @@ sh_distance <-  municipalities %>%
   select(-nearest_point_index) 
 ```
 
-
-
 ```{r}
 ggplot() +
   geom_sf(
@@ -248,6 +245,7 @@ ggplot() +
     axis.ticks=element_blank()
     )
 ```
+
 # Market Access
 
 ```{r}
@@ -275,4 +273,3 @@ market_acess_by_muni <- left_join(
   ) %>% 
   select(-c("2000"))
 ```
-
