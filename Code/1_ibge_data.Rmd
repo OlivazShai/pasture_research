@@ -245,17 +245,27 @@ cattle_prices_2017_census <- cattle_sales_census %>%
 
 # Geographic files
 
-## Municipality polygons
+## Municipality polygons 
 
 ```{r}
 municipalities <- read_municipality(
   code_muni = "all", 
-  year = 2017,
+  year = 2022,
   simplified = FALSE
   ) %>% 
   mutate(
     code_muni = as.character(code_muni)
   )
+```
+
+**Lagoa dos Patos** (4300001) e **Lagoa Mirim** (4300002) are lakes, included by IBGE for legal reasons.
+
+```{r}
+municipalities <- municipalities %>%
+  filter(
+    ! code_muni %in% c(4300001,4300002)
+  )
+
 ```
 
 ## Conservation Units
@@ -278,6 +288,8 @@ indigenous_lands <- read_indigenous_land(
 
 ## AMCs - Historically comparable municipalities
 
+This database is organized by AMC. In the column `list_code_muni_2010` we have a string, listing all 2010 municipalities in each AMC.
+
 ```{r}
 amc_1991 <- read_comparable_areas(
   start_year = 1991,
@@ -296,10 +308,12 @@ amc_1991 <- read_comparable_areas(
 
 ### By municipality
 
+Here, I'll disagregate `amc_1991` by 2010 municipality
+
 ```{r}
 amc_1991_by_muni <- amc_1991 %>% 
   mutate(
-    muni = str_split(
+    code_muni = str_split(
       list_code_muni_2010,
       pattern = ","
     )
@@ -308,8 +322,16 @@ amc_1991_by_muni <- amc_1991 %>%
     -list_code_muni_2010
   ) %>% 
   unnest_longer(
-    muni
-  ) 
+    code_muni
+  ) %>% 
+  # Get municipality names
+  left_join(
+    municipalities %>% 
+      as_tibble() %>% 
+      select(1:2, 4),
+    
+    by = "code_muni"
+  )
 ```
 
 ### Municipalities cover in AMCs
@@ -318,35 +340,32 @@ There are a few new municipalities which are not covered by the 2010 AMCs.
 
 ```{r}
 muni_not_in_amc <- anti_join(
-    municipalities,
+    municipalities %>% 
+      as_tibble() %>% 
+      select(1:4),
     
     amc_1991_by_muni%>% 
       as_tibble() %>% 
       select(1:2),
-    by = c("code_muni" = "muni")
+    by = c("code_muni")
   )
 ```
 
-Simply intersecting these municipalities with the AMCs does not work. The solution won't be simply geographical, but historical. We verify externally from which municipalities these ones split from.
+Simply intersecting these municipalities with the AMCs does not work. The solution won't be simply geographical, but historical. We verify externally from which municipalities these ones split from. I'll list the new municipalities, the municipalities they split from, and the AMC from the old municipalities.
 
-Mojuí dos campos - Santarem PA:
+**Mojuí dos campos** split from Santarem PA - 2020\
+**Pescaria brava** split from Laguna SC - 14440\
+**Balneario rincão** split from Içara SC - 14413\
+**Pinto Bandeira** split from Bento Gonçalves RS - 15038
 
-\
-Pescaria brava - Laguna SC:
+**Paraíso das Aguas** (MS) split from three different AMCs\
+Água Clara = \~ 1085 (1 municipio)\
+Costa Rica = \~ 1103 (3 munis)\
+Chapadão do Sul = 1107 (1 munis)
 
-\
-Balneario rincão - Içara SC:
+### New AMCs
 
-\
-Lagoa dos Patos e Lagoa Mirim não existem
-
-\
-Pinto Bandeira - Bento Gonçalves RS:
-
-Paraíso das Aguas MS:\
-Água Clara = 5000203 \~ 1085\
-Costa Rica = 5003256 \~ 1103\
-Chapadão do Sul = 5002951 \~ 1107
+I'll start a new series of AMC codes starting in 220XX. These new codes will substitute the codes from the AMCs where new municipalities were created. I'll also have to agregate the geometry for the three AMCs which disagregated.
 
 ## Biomes
 
@@ -414,7 +433,7 @@ amc_1991_with_biomes <- bind_cols(
 ## Generate RDSs
 
 ```{r}
-bulk_rds(
+bulk_write_rds(
   cattle_heads_ppm,
   cattle_sales_census, 
   cattle_prices_2017_census,
