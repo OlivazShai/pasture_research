@@ -365,7 +365,11 @@ Chapadão do Sul = 1107 (1 munis)
 
 ### New AMCs
 
-I'll start a new series of AMC codes starting in 220XX. These new codes will substitute the codes from the AMCs where new municipalities were created. I'll also have to agregate the geometry for the three AMCs which disagregated.
+I'll start a new series of AMC codes starting in 990XX. These new codes will substitute the codes from the AMCs where new municipalities were created. I'll also have to agregate the geometry for the three AMCs which disagregated.
+
+```{r}
+
+```
 
 ## Biomes
 
