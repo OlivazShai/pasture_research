@@ -245,7 +245,7 @@ cattle_prices_2017_census <- cattle_sales_census %>%
 
 # Geographic files
 
-## Municipality polygons 
+## Municipality polygons
 
 ```{r}
 municipalities <- read_municipality(
@@ -265,7 +265,6 @@ municipalities <- municipalities %>%
   filter(
     ! code_muni %in% c(4300001,4300002)
   )
-
 ```
 
 ## Conservation Units
@@ -331,7 +330,7 @@ amc_1991_by_muni <- amc_1991 %>%
       select(1:2, 4),
     
     by = "code_muni"
-  )
+  ) 
 ```
 
 ### Municipalities cover in AMCs
@@ -342,7 +341,7 @@ There are a few new municipalities which are not covered by the 2010 AMCs.
 muni_not_in_amc <- anti_join(
     municipalities %>% 
       as_tibble() %>% 
-      select(1:4),
+      select(1,2,4),
     
     amc_1991_by_muni%>% 
       as_tibble() %>% 
@@ -359,26 +358,83 @@ Simply intersecting these municipalities with the AMCs does not work. The soluti
 **Pinto Bandeira** split from Bento Gonçalves RS - 15038
 
 **Paraíso das Aguas** (MS) split from three different AMCs\
-Água Clara = \~ 1085 (1 municipio)\
-Costa Rica = \~ 1103 (3 munis)\
-Chapadão do Sul = 1107 (1 munis)
+- Água Clara = \~ 1085 (1 municipio)\
+- Costa Rica = \~ 1103 (3 munis)\
+- Chapadão do Sul = 1107 (1 munis)
 
 ### New AMCs
 
 I'll start a new series of AMC codes starting in 990XX. These new codes will substitute the codes from the AMCs where new municipalities were created. I'll also have to agregate the geometry for the three AMCs which disagregated.
 
 ```{r}
+muni_not_in_amc <- muni_not_in_amc %>% 
+  mutate(
+    code_amc = case_when(
+      name_muni == "Mojuí Dos Campos" ~ "99001",
+      name_muni == "Pescaria Brava" ~ "99002",
+      name_muni == "Balneário Rincão" ~ "99003",
+      name_muni == "Pinto Bandeira" ~ "99004",
+      name_muni == "Paraíso Das Águas" ~ "99005"
+    )
+  )
+```
 
+The process is the following. First, I'll append these rows to the AMC dataframe. Second, I'll change the codes of all the cities in the same AMCs as the new cities to the new codes. Third, I'll define the geometry as the union of the older AMCs geometries, so all three AMCs related to Paraíso das Águas are agregated into the same polygon.
+
+```{r}
+# Define the `code_amc` values that need unioning
+amc_to_union <- c("99001", "99002", "99003", "99004", "99005")
+
+muni_to_amc <- amc_1991_by_muni %>%
+  # append the new municipalities
+  bind_rows(muni_not_in_amc) %>% 
+  # define as sf
+  st_as_sf() %>% 
+  # Update AMC codes
+  mutate(
+    code_amc = case_when(
+      code_amc == "2020" ~ "99001",
+      code_amc == "14440" ~ "99002",
+      code_amc == "14413" ~ "99003",
+      code_amc == "15038" ~ "99004",
+      # Paraíso das Águas:
+      code_amc == "1085" ~ "99005",
+      code_amc == "1103" ~ "99005",
+      code_amc == "1107" ~ "99005",
+      .default = code_amc
+    )
+  )  %>% 
+  # Group municipalities by AMC
+  group_by(code_amc) %>%
+  # Union only the specified groups
+  mutate(
+    geom = if_else(
+      code_amc %in% amc_to_union, 
+      st_union(geom), 
+      geom)
+  ) %>% 
+  ungroup()
+
+```
+
+Now we remove the auxiliary dataframes used up until here.
+
+```{r}
+
+rm(amc_1991, amc_1991_by_muni, muni_not_in_amc)
 ```
 
 ## Biomes
 
+Simplified dataframe, without topology errors in the sphere.
+
 ```{r}
-biomes <- read_biomes(
+biomes_simplified <- read_biomes(
   year = 2019, 
   # Will use simplified geometry because original resolution has 
   # invalid unsolvable geometry for amazon, an issue has been raised.
-  # I'll improve when developers correct the issue 
+  # The problem comes from original IBGE data
+  # I'll improve this when developers correct the issue 
   simplified = TRUE
   ) %>% 
   mutate(
@@ -390,7 +446,28 @@ biomes <- read_biomes(
   )
 ```
 
+Unsimplified dataframe, has topology error when using s2
+
+```{r}
+biomes <- read_biomes(
+  year = 2019, 
+  # Usage of this df depends of s2 turned off 
+  simplified = FALSE
+  ) %>% 
+  mutate(
+    # simplify biome names
+    name_biome = name_biome %>% 
+      stringi::stri_trans_general(., "Latin-ASCII") %>% 
+      str_replace(.," ", "_") %>% 
+      str_to_lower()
+  )
+```
+
 ### Municipalities by biome
+
+```{r}
+bulk_read_rds(municipalities)
+```
 
 ```{r}
 municipalities_with_biomes <- bind_cols(
@@ -444,7 +521,7 @@ bulk_write_rds(
   municipalities, 
   conservation_units, 
   indigenous_lands,
-  amc_1991,
+  muni_to_amc,
   biomes
   )
 ```
