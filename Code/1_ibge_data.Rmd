@@ -429,7 +429,7 @@ rm(amc_1991, amc_1991_by_muni, muni_not_in_amc)
 Simplified dataframe, without topology errors in the sphere.
 
 ```{r}
-biomes_simplified <- read_biomes(
+biomes <- read_biomes(
   year = 2019, 
   # Will use simplified geometry because original resolution has 
   # invalid unsolvable geometry for amazon, an issue has been raised.
@@ -446,10 +446,10 @@ biomes_simplified <- read_biomes(
   )
 ```
 
-Unsimplified dataframe, has topology error when using s2
+Unsimplified raw dataframe, has topology error when using s2.
 
 ```{r}
-biomes <- read_biomes(
+biomes_raw <- read_biomes(
   year = 2019, 
   # Usage of this df depends of s2 turned off 
   simplified = FALSE
@@ -464,10 +464,6 @@ biomes <- read_biomes(
 ```
 
 ### Municipalities by biome
-
-```{r}
-bulk_read_rds(municipalities)
-```
 
 ```{r}
 municipalities_with_biomes <- bind_cols(
