@@ -28,27 +28,26 @@ library(datazoom.amazonia) #development version
 
 # Personal functions
 source("../Functions/functions.R")
+source("../Functions/baci_cleaner.R")
 ```
 
 ```{r, include=FALSE, eval=FALSE}
 
-library(devtools) 
+library(devtools)
 
 # Datazoom development version
 devtools::install_github("OlivazShai/datazoom.amazonia")
 ```
 
-# BACI trade data
+# BACI data importing
 
 ## Importing BACI data
 
-Note that I need (as per September 2024) to use the development version of the `datazoom.amazonia` package. The CRAN published version has old data which is unavailable, so I corrected the links and included the most up to date BACI files. I also corrected a faulty procedure that deterred the download of multiple years at once.
-
-Here, I download the trade data using the `datazoom.amazonia` package.
+Here, I download the trade data using the `datazoom.amazonia` package. Note that I need (as per September 2024) to use the development version of the `datazoom.amazonia` package. The CRAN published version has old data which is unavailable, so I corrected the links and included the most up to date BACI files. I also corrected a faulty procedure that deterred the download of multiple years at once.
 
 Ensure there's enough memory, I follow the process in this [stackoverflow](https://stackoverflow.com/questions/51248293/error-vector-memory-exhausted-limit-reached-r-3-5-0-macos){.uri} issue.
 
-```{r, eval=FALSE}
+```{r, eval=FALSE, include=FALSE}
 gc()
 library(usethis) 
 usethis::edit_r_environ() # Include R_MAX_VSIZE=100Gb
@@ -73,6 +72,12 @@ This process yields a list of 28 vectors, one for each year. Variables are:
 | `j`      | Importer (ISO 3-digit country code)                |
 | `v`      | Value of the trade flow (in thousands current USD) |
 | `q`      | Quantity (in metric tons)                          |
+
+To avoid dealing with this (huge) file all the time in the environment, I save it serialized and reuse when needed. Even serialized, it is too heavy to push o github, so I'll maintain locally.
+
+```{r}
+bulk_write_rds(baci_raw)
+```
 
 ## Importing product and country codes
 
@@ -101,8 +106,61 @@ Importantly, `Brazil = 76` and `China = 156`.
 I select only bovine meat products.
 
 ```{r}
-baci_bovine_meat_products <- baci_product_codes %>% 
+baci_product_codes %>% 
   filter(
     str_detect(description,"Meat: of bovine animals")
   ) 
 ```
+
+And I define a vector with only the codes for use in the (near) future .
+
+```{r}
+bovine_products <- baci_product_codes %>% 
+  filter(
+    str_detect(description,"Meat: of bovine animals")
+  ) %>%
+  # Get code as numeric (to match how baci data is saved)
+  transmute(
+    code_numeric = as.numeric(code)
+  ) %>%
+  # define as vector
+  pull()
+  
+```
+
+# BACI data cleaning
+
+## Subset of selected products 
+
+Here, I extract information on Brazilian exports to China of each bovine meat product, for each year. This considerably reduces the space occupied by BACI data. Since we only need data from these products, I'll use this data frame from now on.
+
+```{r}
+bulk_read_rds(baci_raw)
+
+baci_bovine <- lapply(
+  # complete dataset
+  baci_raw,
+  # selecting bov prods in each dataframe
+  \(x) get_product_trade(x, bovine_products)
+  ) %>% 
+  # bind as data.table
+  data.table::rbindlist()
+
+rm(baci_raw)
+```
+
+Saving serialized:
+
+```{r}
+bulk_write_rds(baci_bovine)
+```
+
+# Experiments 
+
+This section houses experiments. Since the data is so heavy, I'll try out some algorithms before actually employing them to the whole set.
+
+*USE DTPLYR TO PROGRAM WITH A DATATABLE BACKEND*
+
+## Sub-setting
+
+## Aggregation

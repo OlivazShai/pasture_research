@@ -1,18 +1,15 @@
-get_br_ch_exports = function(x){
+get_product_trade = function(x, products){
   
-  # product codes as numeric
-  products = c(20110, 20120, 20130, 20210, 20220, 20230)
-  
+  # product is product codes as numeric
   # x is an individual baci dataframe
-  br_exports = x %>% 
+  
+  product_trade = x %>% 
     filter(
-      i == 76, 
-      j == 156,
-      k %in% products
+      k %in% {{ products }}
     )
   
   # return exports
   
-  return(br_exports)
+  return(product_trade)
   
 }
