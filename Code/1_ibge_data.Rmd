@@ -287,6 +287,8 @@ indigenous_lands <- read_indigenous_land(
 
 ## AMCs - Historically comparable municipalities
 
+### AMC dataframe 1991
+
 This database is organized by AMC. In the column `list_code_muni_2010` we have a string, listing all 2010 municipalities in each AMC.
 
 ```{r}
@@ -424,7 +426,11 @@ Now we remove the auxiliary dataframes used up until here.
 rm(amc_1991, amc_1991_by_muni, muni_not_in_amc)
 ```
 
+This `muni_to_amc` dataframe connects each 2022 municipality to a 1991 AMC, with full municipality coverage.
+
 ## Biomes
+
+### Biome dataframes
 
 Simplified dataframe, without topology errors in the sphere.
 
@@ -443,10 +449,14 @@ biomes <- read_biomes(
       stringi::stri_trans_general(., "Latin-ASCII") %>% 
       str_replace(.," ", "_") %>% 
       str_to_lower()
+  )  %>% 
+  # Removing Sistema Costeiro, which is not a biome
+  filter(
+    ! name_biome == "sistema_costeiro"
   )
 ```
 
-Unsimplified raw dataframe, has topology error when using s2.
+Unsimplified raw dataframe, has topology error when using S2. This causes errors with intersections, and disabling S2 makes area and distance measurementes incorrect. I keep this version in the project in case it comes handy or in case the developers of `geobr` correct the error (which is present in the original IBGE data, not from the library).
 
 ```{r}
 biomes_raw <- read_biomes(
@@ -463,10 +473,12 @@ biomes_raw <- read_biomes(
   )
 ```
 
-### Municipalities by biome
+### Municipalities with biomes
+
+I intersect municipalities and biomes, defining dummies whether each biome covers some area in the respective municipality.
 
 ```{r}
-municipalities_with_biomes <- bind_cols(
+muni_with_biomes <- bind_cols(
   municipalities,
   
   # intersection municipalities and biomes
@@ -478,14 +490,53 @@ municipalities_with_biomes <- bind_cols(
   as_tibble(.name_repair="minimal") %>% 
   setNames(
     biomes$name_biome
-  ) %>% 
-  select(
-    -sistema_costeiro
+  ) 
   )
+```
+
+This is not necessary for the project, but is kept in case it comes handy.
+
+### Biome area in each municipality
+
+I'll also calculate the area each biome occupies in each municipality. This is ongoing! I have to deal with units, doing that soon...
+
+```{r}
+x <- sample_n(municipalities, 100)
+
+
+# Perform intersection and calculate area
+intersections <- st_intersection(x, biomes) %>% 
+  # Correct faulty polygons
+  st_make_valid() %>% 
+  # Calculate intersection areas
+  mutate(
+    area_intersection = st_area(geom)
+  )
+
+# Create a table with the area for each muni and biome
+municipality_biome_area <- intersections %>%
+  as_tibble() %>%
+  select(
+    code_muni,
+    name_muni,
+    name_biome, 
+    area_intersection
+  ) %>%
+  pivot_wider(
+    names_from = name_biome,
+    values_from = area_intersection,
+    values_fill = NA  # Fill with 0 if there's no intersection
   )
 ```
 
 ### AMCs with biomes
+
+```{r}
+x <- muni_with_biomes %>% 
+  filter(
+    cerrado
+  ) 
+```
 
 ```{r}
 amc_1991_with_biomes <- bind_cols(
