@@ -158,7 +158,7 @@ Saving serialized:
 bulk_write_rds(baci_bovine)
 ```
 
-## Brazil to china exports
+## Brazilian exports to China
 
 First, I'll explore which of the bovine products are exported from Brazil to China.
 
@@ -179,28 +179,43 @@ baci_bovine %>%
   filter(
     k == 20230,
     i == 76, #Brazil
-    j == 156, #China
+    j == 344, #China
     )
 ```
 
-## Aggregation
+## Aggregated imports by country-year
 
-I'll aggregate all trade flows by importer country, excluding Brazil both as importer and as exporter. Selecting only product *020230.*
+I'll aggregate all trade flows by importer country, excluding Brazil both as importer and as exporter. Selecting only product *020230*.
 
 ```{r}
-baci_bovine %>% 
+bovine_imports <- baci_bovine %>% 
   filter(
     # remove Brazil as exporter and importer
-    ! i == 76, ! j == 76,
+    ! i == 76, 
+    ! j == 76,
     # consider only 020230
     k == 20230
   ) %>% 
-  # aggregate by importer country
-  group_by(
-    t, j
-  ) %>% 
+  # aggregate by year and importer 
   summarise(
-    q_sum = sum(q, na.rm = TRUE),
-    v_sum = sum(v, na.rm = TRUE)
+    q = sum(q, na.rm = TRUE),
+    v = sum(v, na.rm = TRUE),
+    .by = c(t, j)
+  ) %>% 
+  # fixate imports in 2000
+  group_by(
+    j
+  ) %>% 
+  mutate(
+    q_2000 = if_else(t == 2000, q, NA)
+  ) %>% 
+  fill(
+    q_2000
+  ) %>%
+  # calculate growth rate
+  # and define a china dummy
+  mutate(
+    G = (q - q_2000)/q_2000,
+    china = if_else(j == 156, 1, 0)
   )
 ```
