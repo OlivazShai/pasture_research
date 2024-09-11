@@ -1,0 +1,244 @@
+---
+title: "Survey Data from IBGE"
+author: "Shai Vaz"
+date: "April 2024"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+# Data Wrangling
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(readr)
+
+# Graphics
+library(ggplot2)
+
+# Geographic
+library(sf)
+library(sidrar)
+library(geobr)
+
+# Personal functions
+source("../Functions/functions.R")
+```
+
+# Legal Amazon
+
+We define states and municipalities in the Legal Amazon. All municipalities in the states are part of the LA, except for Maranhão, where only those left of the 14th meridian are considered.
+
+```{r}
+amazon_states = c(
+  11:17, # Regiao Norte
+  21, # Maranhão
+  51 # Mato Grosso
+  )
+```
+
+# PPM Data (Sidra)
+
+Cattle stock by municipality, from 1995 to 2022.
+
+```{r}
+# Define list of geographic filters
+# Some regions need division due to data limits
+
+filter_list = list(
+  # North
+  list("Region" = 1),
+  # Northeast
+  list("State" = 21:24),
+  list("State" = 25:29),
+  # Southeast
+  list("State" = 31:32),
+  list("State" = c(33,35)), # there's no State 34
+  # South
+  list("Region" = 4),
+  # Midwest
+  list("Region" = 5)
+)
+
+# Initialise an empty data frame to store the aggregated data
+ppm <- data.frame()
+
+# Loop through each geo filter
+
+for (filter in filter_list) {
+  
+  # Import data for the current region
+  x <- get_sidra(
+    x = 3939, # Efetivo dos rebanhos, por tipo de rebanho
+    variable = 105,  # Efetivo dos rebanhos (Cabeças)
+    period = as.character(1995:2022),
+    classific = list("C79"), # Tipo de rebanho:
+    category = list(2670), # Bovinos
+    format = 4, # códigos e descrição
+    geo = "City", # detalhe espacial
+    geo.filter = filter
+  )
+  
+  # Track job
+  print(filter)
+  
+  # Append the data to the aggregated data frame
+  ppm <- bind_rows(ppm, x)
+}
+
+rm(x, filter, filter_list)
+```
+
+Cleaning data.
+
+```{r}
+cattle_heads_ppm <- ppm %>% 
+  select(
+    "Valor",
+    "Município (Código)",
+    "Município",
+    "Ano"
+  ) %>% 
+  rename(
+    cattle_heads = "Valor",
+    code_muni = "Município (Código)",
+    name_muni = "Município",
+    year = "Ano"
+  ) %>% 
+  mutate(
+    name_state = str_split_i(name_muni, " - ", 2),
+    code_state = str_sub(code_muni, start = 1, end = 2),
+    name_muni = str_split_i(name_muni, " - ", 1)
+  ) %>% 
+  relocate(year, code_muni, name_muni, code_state, name_state, cattle_heads)
+```
+
+# Census Data (Sidra)
+
+## 2017 Census data
+
+```{r}
+census_variables = c(
+    # Discriminated by farm size (in heads) and finality
+
+    9521, # Cattle heads - small farms (<50h)
+    9523, # Sold heads - small farms
+    9743, # Sale value - small farms
+
+    2059, # Cattle heads - big farms (>50h)
+
+    9525, # Breeding stock sold - big farms 
+    9745, # Sale value Br.St. - big farms
+
+    9527, # Sold for finishing - big farms 
+    9747, # Sale value for finishing - big farms 
+
+    9529, # Sold for slaughter - big farms
+    9749 # Sale value for slaughter - big farms  
+    )
+
+census_names = c(
+  "cattle_heads_small",
+  "heads_sold_small",
+  "sales_value_small",
+  
+  "cattle_heads_big",
+  "heads_sold_big_breed",
+  "sales_value_big_breed",
+  
+  "heads_sold_big_finish",
+  "sales_value_big_finish",
+  
+  "heads_sold_big_slaughter",
+  "sales_value_big_slaughter"
+)
+```
+
+```{r}
+for (i in 1:10) {
+  census_name_i = census_names[i]
+  census_variable_i = census_variables[i]
+  print(i)
+  
+  census_i <- get_sidra(
+    x = 6910, # Cattle headcounts and sales
+    variable = census_variable_i,
+    classific = "c829", # Tipology
+    category = list("46302"), # Only return totals
+    geo = "City", # Municipality level data
+    format = 3, # Names and codes for geo levels  
+    digits = "max" # Maximum digits
+  ) %>% 
+  # Cleaning
+  rename(
+    "code_muni" = "Município (Código)",
+    "name_muni" = "Município"
+  ) %>%
+  rename_with(
+    .cols = "Valor",
+    .fn = \(x) census_name_i
+  ) %>% 
+  select(
+    name_muni,
+    code_muni,
+    {{census_name_i}}
+  ) %>% 
+  mutate(
+    name_state = str_split_i(name_muni, " - ", 2),
+    code_state = str_sub(code_muni, start = 1, end = 2),
+    name_muni = str_split_i(name_muni, " - ", 1)
+  ) %>% 
+  relocate(name_muni, code_muni, name_state, code_state, {{census_name_i}})
+  
+  # Joining variables
+  if (i == 1) {
+    cattle_sales_census = census_i
+  } else {
+    cattle_sales_census = full_join(
+      cattle_sales_census,
+      census_i,
+      by = join_by(
+        "name_muni", "code_muni", "name_state", "code_state"
+      )
+    )
+      
+    }
+  
+}
+
+remove(census_i, census_name_i, census_variable_i)
+
+```
+
+```{r}
+remove(census_names, census_variables, i)
+```
+
+## 2017 Average Prices
+
+Now, I'll use census sales data to extract average cattle price per municipality. I only use sales for slaughter from large farms.
+
+```{r}
+cattle_prices_2017_census <- cattle_sales_census %>%
+  replace(
+    is.na(.), 0
+  ) %>% 
+  mutate(
+    average_price =
+      (sales_value_big_slaughter)/
+      (heads_sold_big_slaughter)
+  ) %>% 
+  drop_na(
+    average_price
+  ) %>% 
+  select(
+   code_muni,
+   name_muni,
+   code_state,
+   name_state,
+   average_price
+  )
+```
