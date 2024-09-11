@@ -11,7 +11,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r, include=FALSE}
 # Data Wrangling
-
 library(data.table)
 library(dplyr)
 library(tidyr)
@@ -28,6 +27,8 @@ library(sidrar)
 library(geobr)
 library(datazoom.amazonia) #development version
 
+# Econometrics
+library(fixest)
 
 # Personal functions
 source("../Functions/functions.R")
@@ -218,4 +219,19 @@ bovine_imports <- baci_bovine %>%
     G = (q - q_2000)/q_2000,
     china = if_else(j == 156, 1, 0)
   )
+```
+
+# Auxiliary regressions 
+
+Using `fixest`
+
+```{r}
+model <- feols(
+  G ~ china:i(t) | t,
+  data = bovine_imports,
+  weights = bovine_imports$q_2000
+  )
+
+
+etable(model)
 ```
