@@ -11,10 +11,13 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r, include=FALSE}
 # Data Wrangling
+
+library(data.table)
 library(dplyr)
 library(tidyr)
 library(stringr)
 library(readr)
+library(dtplyr)
 
 # Graphics
 library(ggplot2)
@@ -43,7 +46,7 @@ devtools::install_github("OlivazShai/datazoom.amazonia")
 
 ## Importing BACI data
 
-Here, I download the trade data using the `datazoom.amazonia` package. Note that I need (as per September 2024) to use the development version of the `datazoom.amazonia` package. The CRAN published version has old data which is unavailable, so I corrected the links and included the most up to date BACI files. I also corrected a faulty procedure that deterred the download of multiple years at once.
+Here, I download the trade data using the `datazoom.amazonia` package. Note that I need (as per September 2024) to use the development version of the `datazoom.amazonia` package. The CRAN published version had old data which was unavailable, so I corrected the links and included the most up to date BACI files. I also corrected a faulty procedure that deterred the download of multiple years at once.
 
 Ensure there's enough memory, I follow the process in this [stackoverflow](https://stackoverflow.com/questions/51248293/error-vector-memory-exhausted-limit-reached-r-3-5-0-macos){.uri} issue.
 
@@ -73,7 +76,7 @@ This process yields a list of 28 vectors, one for each year. Variables are:
 | `v`      | Value of the trade flow (in thousands current USD) |
 | `q`      | Quantity (in metric tons)                          |
 
-To avoid dealing with this (huge) file all the time in the environment, I save it serialized and reuse when needed. Even serialized, it is too heavy to push o github, so I'll maintain locally.
+To avoid dealing with this (huge) file all the time in the environment, I save it serialized and reuse when needed. Even serialized, it is too heavy to push to github, so I'll maintain locally.
 
 ```{r}
 bulk_write_rds(baci_raw)
@@ -130,7 +133,7 @@ bovine_products <- baci_product_codes %>%
 
 # BACI data cleaning
 
-## Subset of selected products 
+## Subset of selected products
 
 Here, I extract information on Brazilian exports to China of each bovine meat product, for each year. This considerably reduces the space occupied by BACI data. Since we only need data from these products, I'll use this data frame from now on.
 
@@ -155,12 +158,49 @@ Saving serialized:
 bulk_write_rds(baci_bovine)
 ```
 
-# Experiments 
+## Brazil to china exports
 
-This section houses experiments. Since the data is so heavy, I'll try out some algorithms before actually employing them to the whole set.
+First, I'll explore which of the bovine products are exported from Brazil to China.
 
-*USE DTPLYR TO PROGRAM WITH A DATATABLE BACKEND*
+```{r}
+baci_bovine %>% 
+  filter(
+    i == 76, #Brazil
+    j == 156 #China
+  )
+```
 
-## Sub-setting
+Notice the lion's share of beef exports are of the *020230* (*Meat: of bovine animals, boneless cuts, frozen*) specification. It is also the only one with reliable flow every year, allowing the intended comparisons. So, from now on, I'll restrict the analysis to only this specific product.
+
+Sketch, save to file when needed.
+
+```{r}
+baci_bovine %>% 
+  filter(
+    k == 20230,
+    i == 76, #Brazil
+    j == 156, #China
+    )
+```
 
 ## Aggregation
+
+I'll aggregate all trade flows by importer country, excluding Brazil both as importer and as exporter. Selecting only product *020230.*
+
+```{r}
+baci_bovine %>% 
+  filter(
+    # remove Brazil as exporter and importer
+    ! i == 76, ! j == 76,
+    # consider only 020230
+    k == 20230
+  ) %>% 
+  # aggregate by importer country
+  group_by(
+    t, j
+  ) %>% 
+  summarise(
+    q_sum = sum(q, na.rm = TRUE),
+    v_sum = sum(v, na.rm = TRUE)
+  )
+```
