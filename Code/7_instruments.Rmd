@@ -29,4 +29,30 @@ library(datazoom.amazonia)
 source("../Functions/functions.R")
 ```
 
-# Legal Amazon
+# Importing separate data
+
+```{r}
+bulk_read_rds(
+  china_shock,
+  shares_by_amc
+)
+```
+
+# SSIV
+
+## Agregating data
+
+```{r}
+ssiv <- cross_join(
+  shares_by_amc,
+  china_shock
+  ) |>
+  # calculate ssiv
+  mutate(
+    ssiv = share * psi * x
+  )
+```
+
+```{r}
+bulk_write_rds(ssiv)
+```
