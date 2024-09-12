@@ -237,6 +237,10 @@ bovine_imports <- baci_bovine |>
   )
 ```
 
+```{r}
+bulk_write_rds(bovine_imports)
+```
+
 # Auxiliary regressions
 
 To extract the china shock, I regress the growth rate with respect to 2000 (`G)` against a china dummy interacted with year fixed effects. This extracts the china specific shock each year. Model `m1` doesn't employ weights and model `m2` uses starting-point import flows as weights.
