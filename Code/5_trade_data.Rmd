@@ -173,8 +173,6 @@ baci_bovine %>%
 
 Notice the lion's share of beef exports are of the *020230* (*Meat: of bovine animals, boneless cuts, frozen*) specification. It is also the only one with reliable flow every year, allowing the intended comparisons. So, from now on, I'll restrict the analysis to only this specific product.
 
-Sketch, save to file when needed.
-
 ```{r}
 baci_bovine %>% 
   filter(
@@ -184,54 +182,92 @@ baci_bovine %>%
     )
 ```
 
+I'll extract the quantity of brazilian exports of bovine meat to China in 2000.
+
+```{r}
+br_to_ch_2000 <- baci_bovine %>% 
+  filter(
+    k == 20230,
+    i == 76, #Brazil
+    j == 344, #China
+    t == 2000
+    ) |> 
+  pull(var = q)
+```
+
 ## Aggregated imports by country-year
 
 I'll aggregate all trade flows by importer country, excluding Brazil both as importer and as exporter. Selecting only product *020230*.
 
 ```{r}
-bovine_imports <- baci_bovine %>% 
+bovine_imports <- baci_bovine |> 
   filter(
     # remove Brazil as exporter and importer
     ! i == 76, 
     ! j == 76,
     # consider only 020230
     k == 20230
-  ) %>% 
+  ) |> 
   # aggregate by year and importer 
   summarise(
     q = sum(q, na.rm = TRUE),
     v = sum(v, na.rm = TRUE),
     .by = c(t, j)
-  ) %>% 
+  ) |> 
   # fixate imports in 2000
   group_by(
     j
-  ) %>% 
+  ) |> 
   mutate(
     q_2000 = if_else(t == 2000, q, NA)
-  ) %>% 
+  ) |> 
   fill(
     q_2000
-  ) %>%
+  ) |>
   # calculate growth rate
   # and define a china dummy
   mutate(
     G = (q - q_2000)/q_2000,
     china = if_else(j == 156, 1, 0)
+  ) |> 
+  # remove NA growth and years before 2000
+  filter(
+    t > 1999,
+    ! is.na(G)
   )
 ```
 
-# Auxiliary regressions 
+# Auxiliary regressions
 
-Using `fixest`
+To extract the china shock, I regress the growth rate with respect to 2000 (`G)` against a china dummy interacted with year fixed effects. This extracts the china specific shock each year. Model `m1` doesn't employ weights and model `m2` uses starting-point import flows as weights.
 
 ```{r}
-model <- feols(
+w <- bovine_imports$q_2000
+
+m1 <- feols(
   G ~ china:i(t) | t,
   data = bovine_imports,
-  weights = bovine_imports$q_2000
+  weights = w
   )
 
+etable(m1)
+```
 
-etable(model)
+I extract these coefficients as the `psi` china shocks. I also include the initial brazilian exports to China in 2000.
+
+```{r}
+china_shock <- tidy(m1) |> 
+  select(
+    psi = estimate
+  ) |> 
+  mutate(
+    # include year
+    year = 2000:2022,
+    # include initial exports
+    x = br_to_ch_2000
+  )
+```
+
+```{r}
+bulk_write_rds(china_shock)
 ```
