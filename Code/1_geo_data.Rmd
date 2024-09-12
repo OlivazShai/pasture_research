@@ -28,7 +28,6 @@ library(geobr)
 source("../Functions/functions.R")
 ```
 
-
 # Municipality polygons
 
 ```{r}
@@ -36,7 +35,7 @@ municipalities <- read_municipality(
   code_muni = "all", 
   year = 2022,
   simplified = FALSE
-  ) %>% 
+  ) |> 
   mutate(
     code_muni = as.character(code_muni)
   )
@@ -45,13 +44,13 @@ municipalities <- read_municipality(
 **Lagoa dos Patos** (4300001) e **Lagoa Mirim** (4300002) are lakes, included by IBGE for legal reasons.
 
 ```{r}
-municipalities <- municipalities %>%
+municipalities <- municipalities |>
   filter(
     ! code_muni %in% c(4300001,4300002)
   )
 ```
 
-## Conservation Units
+# Conservation Units
 
 ```{r}
 conservation_units <- read_conservation_units(
@@ -60,7 +59,7 @@ conservation_units <- read_conservation_units(
   )
 ```
 
-## Indigenous Lands
+# Indigenous Lands
 
 ```{r}
 indigenous_lands <- read_indigenous_land(
@@ -69,9 +68,9 @@ indigenous_lands <- read_indigenous_land(
 )
 ```
 
-## AMCs - Historically comparable municipalities
+# AMCs - Historically comparable municipalities
 
-### AMC dataframe 1991
+## AMC dataframe 1991
 
 This database is organized by AMC. In the column `list_code_muni_2010` we have a string, listing all 2010 municipalities in each AMC.
 
@@ -80,57 +79,57 @@ amc_1991 <- read_comparable_areas(
   start_year = 1991,
   end_year = 2010,
   simplified = FALSE
-  ) %>% 
+  ) |> 
   select(
     -list_name_muni_2010 # superfluous column
-  ) %>%
+  ) |>
   mutate(
     code_amc = as.character(code_amc)
-  ) %>% 
+  ) |> 
   # There's one polygon self intersecting, we need to make it valid 
   st_make_valid()
 ```
 
-### By municipality
+## By municipality
 
 Here, I'll disagregate `amc_1991` by 2010 municipality
 
 ```{r}
-amc_1991_by_muni <- amc_1991 %>% 
+amc_1991_by_muni <- amc_1991 |> 
   mutate(
     code_muni = str_split(
       list_code_muni_2010,
       pattern = ","
     )
-  ) %>%
+  ) |>
   select(
     -list_code_muni_2010
-  ) %>% 
+  ) |> 
   unnest_longer(
     code_muni
-  ) %>% 
+  ) |> 
   # Get municipality names
   left_join(
-    municipalities %>% 
-      as_tibble() %>% 
+    municipalities |> 
+      as_tibble() |> 
       select(1:2, 4),
     
     by = "code_muni"
   ) 
 ```
 
-### Municipalities cover in AMCs
+## Municipalities cover in AMCs
 
 There are a few new municipalities which are not covered by the 2010 AMCs.
 
 ```{r}
 muni_not_in_amc <- anti_join(
-    municipalities %>% 
-      as_tibble() %>% 
+    municipalities |> 
+      as_tibble() |> 
       select(1,2,4),
     
-    amc_1991_by_muni%>% 
-      as_tibble() %>% 
+    amc_1991_by_muni|> 
+      as_tibble() |> 
       select(1:2),
     by = c("code_muni")
   )
@@ -148,12 +147,12 @@ Simply intersecting these municipalities with the AMCs does not work. The soluti
 - Costa Rica = \~ 1103 (3 munis)\
 - Chapadão do Sul = 1107 (1 munis)
 
-### New AMCs
+## New AMCs
 
 I'll start a new series of AMC codes starting in 990XX. These new codes will substitute the codes from the AMCs where new municipalities were created. I'll also have to agregate the geometry for the three AMCs which disagregated.
 
 ```{r}
-muni_not_in_amc <- muni_not_in_amc %>% 
+muni_not_in_amc <- muni_not_in_amc |> 
   mutate(
     code_amc = case_when(
       name_muni == "Mojuí Dos Campos" ~ "99001",
@@ -171,11 +170,11 @@ The process is the following. First, I'll append these rows to the AMC dataframe
 # Define the `code_amc` values that need unioning
 amc_to_union <- c("99001", "99002", "99003", "99004", "99005")
 
-muni_to_amc <- amc_1991_by_muni %>%
+muni_to_amc <- amc_1991_by_muni |>
   # append the new municipalities
-  bind_rows(muni_not_in_amc) %>% 
+  bind_rows(muni_not_in_amc) |> 
   # define as sf
-  st_as_sf() %>% 
+  st_as_sf() |> 
   # Update AMC codes
   mutate(
     code_amc = case_when(
@@ -189,16 +188,16 @@ muni_to_amc <- amc_1991_by_muni %>%
       code_amc == "1107" ~ "99005",
       .default = code_amc
     )
-  )  %>% 
+  )  |> 
   # Group municipalities by AMC
-  group_by(code_amc) %>%
+  group_by(code_amc) |>
   # Union only the specified groups
   mutate(
     geom = if_else(
       code_amc %in% amc_to_union, 
       st_union(geom), 
       geom)
-  ) %>% 
+  ) |> 
   ungroup()
 
 ```
@@ -212,9 +211,9 @@ rm(amc_1991, amc_1991_by_muni, muni_not_in_amc)
 
 This `muni_to_amc` dataframe connects each 2022 municipality to a 1991 AMC, with full municipality coverage.
 
-## Biomes
+# Biomes
 
-### Biome dataframes
+## Biome dataframes
 
 Simplified dataframe, without topology errors in the sphere.
 
@@ -226,14 +225,14 @@ biomes <- read_biomes(
   # The problem comes from original IBGE data
   # I'll improve this when developers correct the issue 
   simplified = TRUE
-  ) %>% 
+  ) |> 
   mutate(
     # simplify biome names
-    name_biome = name_biome %>% 
-      stringi::stri_trans_general(., "Latin-ASCII") %>% 
-      str_replace(.," ", "_") %>% 
+    name_biome = name_biome |> 
+      stringi::stri_trans_general(., "Latin-ASCII") |> 
+      str_replace(.," ", "_") |> 
       str_to_lower()
-  )  %>% 
+  )  |> 
   # Removing Sistema Costeiro, which is not a biome
   filter(
     ! name_biome == "sistema_costeiro"
@@ -242,20 +241,22 @@ biomes <- read_biomes(
 
 Unsimplified raw dataframe, has topology error when using S2. This causes errors with intersections, and disabling S2 makes area and distance measurementes incorrect. I keep this version in the project in case it comes handy or in case the developers of `geobr` correct the error (which is present in the original IBGE data, not from the library).
 
-```{r}
+```{r, eval=FALSE}
 biomes_raw <- read_biomes(
   year = 2019, 
   # Usage of this df depends of s2 turned off 
   simplified = FALSE
-  ) %>% 
+  ) |> 
   mutate(
     # simplify biome names
-    name_biome = name_biome %>% 
-      stringi::stri_trans_general(., "Latin-ASCII") %>% 
-      str_replace(.," ", "_") %>% 
+    name_biome = name_biome |> 
+      stringi::stri_trans_general(., "Latin-ASCII") |> 
+      str_replace(.," ", "_") |> 
       str_to_lower()
   )
 ```
+
+## Municipality intersections
 
 ### Municipalities with biomes
 
@@ -270,8 +271,8 @@ muni_with_biomes <- bind_cols(
     municipalities,
     biomes,
     sparse = FALSE
-  ) %>% 
-  as_tibble(.name_repair="minimal") %>% 
+  ) |> 
+  as_tibble(.name_repair="minimal") |> 
   setNames(
     biomes$name_biome
   ) 
@@ -280,43 +281,95 @@ muni_with_biomes <- bind_cols(
 
 This is not necessary for the project, but is kept in case it comes handy.
 
-### Biome area in each municipality
+### Biome areas in municipalities
 
-I'll also calculate the area each biome occupies in each municipality. This is ongoing! I have to deal with units, doing that soon...
+First, I calculate the area of each municipality.
 
 ```{r}
-x <- sample_n(municipalities, 100)
+# Calculate area of each municipality
+municipalities <- municipalities |>
+  mutate(
+    area_muni = st_area(geom)
+  )
+```
 
+Then, I intersect the municipalities and biome geometries, then calculate the area of the intersection.
 
-# Perform intersection and calculate area
-intersections <- st_intersection(x, biomes) %>% 
+```{r}
+intersections <- st_intersection(
+  municipalities, 
+  biomes
+  ) |>
   # Correct faulty polygons
-  st_make_valid() %>% 
-  # Calculate intersection areas
+  st_make_valid(
+  ) |> 
+  # calculate intersection area
   mutate(
     area_intersection = st_area(geom)
   )
+```
 
-# Create a table with the area for each muni and biome
-municipality_biome_area <- intersections %>%
-  as_tibble() %>%
+And with the intersections, I make a table with the biome areas in the municipalities, so each biome is in a column.
+
+```{r}
+municipality_biome_area <- intersections |> 
+  as_tibble() |> 
   select(
     code_muni,
     name_muni,
     name_biome, 
     area_intersection
-  ) %>%
+  ) |> 
+  # pivot so each biome is in a column
   pivot_wider(
     names_from = name_biome,
     values_from = area_intersection,
-    values_fill = NA  # Fill with 0 if there's no intersection
+    # Fill with NA if there's no intersection
+    values_fill = NA
+    ) 
+```
+
+### Predominant biomes 
+
+Now, I find the predominant biome in each municipality, defined as the biome with the largest share of the municipality's area.
+
+```{r}
+largest_biome_intersection <- intersections |>
+  group_by(
+    code_muni
+  ) |>
+  # Find the biome with the largest area of intersection
+  slice_max(
+    area_intersection, 
+    n = 1, 
+    with_ties = FALSE
+  ) |>
+  ungroup(
+  ) |>
+  mutate(
+    # Calculate the percentage covered by the largest biome
+    percent_covered = 100 * (area_intersection / area_muni)
+  ) |>
+  select(
+    code_muni,
+    largest_biome = name_biome,
+    area_intersection,
+    percent_covered
+  )
+```
+
+```{r}
+largest_biome_intersection |> 
+  group_by(largest_biome) |> 
+  summarise(
+    biomes = n()
   )
 ```
 
 ### AMCs with biomes
 
 ```{r}
-x <- muni_with_biomes %>% 
+x <- muni_with_biomes |> 
   filter(
     cerrado
   ) 
@@ -331,12 +384,12 @@ amc_1991_with_biomes <- bind_cols(
     amc_1991,
     biomes,
     sparse = FALSE
-  ) %>% 
-  as_tibble(.name_repair="minimal") %>% 
+  ) |> 
+  as_tibble(.name_repair="minimal") |> 
   setNames(
     biomes$name_biome
   ) 
-) %>% 
+) |> 
   select(
     -sistema_costeiro
   )
