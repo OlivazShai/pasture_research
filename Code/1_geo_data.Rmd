@@ -50,6 +50,15 @@ municipalities <- municipalities |>
   )
 ```
 
+I also calculate the area of each municipality.
+
+```{r}
+municipalities <- municipalities |>   
+  mutate(
+    area_muni = st_area(geom)
+  ) 
+```
+
 # Conservation Units
 
 ```{r}
@@ -211,6 +220,21 @@ rm(amc_1991, amc_1991_by_muni, muni_not_in_amc)
 
 This `muni_to_amc` dataframe connects each 2022 municipality to a 1991 AMC, with full municipality coverage.
 
+I'll also generate a dataframe with just the new AMC codes and geometries.
+
+```{r}
+amc_1991_2022 <- muni_to_amc |> 
+  group_by(
+    code_amc
+  ) |> 
+  select(
+    code_amc, geom
+  ) |> 
+  slice(
+    1
+  )
+```
+
 # Biomes
 
 ## Biome dataframes
@@ -226,16 +250,20 @@ biomes <- read_biomes(
   # I'll improve this when developers correct the issue 
   simplified = TRUE
   ) |> 
+  # simplify biome names
   mutate(
-    # simplify biome names
     name_biome = name_biome |> 
-      stringi::stri_trans_general(., "Latin-ASCII") |> 
-      str_replace(.," ", "_") |> 
+      stringi::stri_trans_general("Latin-ASCII") |> 
+      str_replace(" ", "_") |> 
       str_to_lower()
   )  |> 
   # Removing Sistema Costeiro, which is not a biome
   filter(
     ! name_biome == "sistema_costeiro"
+  ) |> 
+  # remove year column
+  select(
+    - year
   )
 ```
 
@@ -256,14 +284,14 @@ biomes_raw <- read_biomes(
   )
 ```
 
-## Municipality intersections
+## Municipality \~ Biome intersections
 
 ### Municipalities with biomes
 
-I intersect municipalities and biomes, defining dummies whether each biome covers some area in the respective municipality.
+I intersect municipalities and biomes, defining dummies whether each biome covers some area in the respective municipality. This is not necessary for the project, but is kept in case it comes handy.
 
-```{r}
-muni_with_biomes <- bind_cols(
+```{r, eval=FALSE}
+biome_dummy_in_muni <- bind_cols(
   municipalities,
   
   # intersection municipalities and biomes
@@ -279,19 +307,7 @@ muni_with_biomes <- bind_cols(
   )
 ```
 
-This is not necessary for the project, but is kept in case it comes handy.
-
 ### Biome areas in municipalities
-
-First, I calculate the area of each municipality.
-
-```{r}
-# Calculate area of each municipality
-municipalities <- municipalities |>
-  mutate(
-    area_muni = st_area(geom)
-  )
-```
 
 Then, I intersect the municipalities and biome geometries, then calculate the area of the intersection.
 
@@ -309,10 +325,10 @@ intersections <- st_intersection(
   )
 ```
 
-And with the intersections, I make a table with the biome areas in the municipalities, so each biome is in a column.
+And with the intersections, I make a table with the biome areas in the municipalities, so each biome is in a column. This is only for conference, if needed.
 
-```{r}
-municipality_biome_area <- intersections |> 
+```{r, eval=FALSE}
+biome_area_in_muni <- intersections |> 
   as_tibble() |> 
   select(
     code_muni,
@@ -326,15 +342,17 @@ municipality_biome_area <- intersections |>
     values_from = area_intersection,
     # Fill with NA if there's no intersection
     values_fill = NA
-    ) 
+  ) 
 ```
 
-### Predominant biomes 
+### Main biome in municipalities
 
-Now, I find the predominant biome in each municipality, defined as the biome with the largest share of the municipality's area.
+Now, I find the main (predominant) biome in each municipality, defined as the biome with the largest share of the municipality's area. This replicates the official "Biomas predominantes para fins estatísticos" from IBGE, avaliable [here](https://biblioteca.ibge.gov.br/visualizacao/livros/liv102097.pdf).
 
 ```{r}
-largest_biome_intersection <- intersections |>
+main_biome_muni <- intersections |>
+  as_tibble(
+  ) |> 
   group_by(
     code_muni
   ) |>
@@ -348,50 +366,100 @@ largest_biome_intersection <- intersections |>
   ) |>
   mutate(
     # Calculate the percentage covered by the largest biome
-    percent_covered = 100 * (area_intersection / area_muni)
+    share_biome = as.numeric(area_intersection) / as.numeric(area_muni)
   ) |>
   select(
-    code_muni,
-    largest_biome = name_biome,
-    area_intersection,
-    percent_covered
+    code_muni, name_muni,
+    code_state, abbrev_state,
+    area_muni, 
+    area_biome = area_intersection,
+    main_biome = name_biome,
+    code_biome,
+    share_biome
   )
 ```
 
-```{r}
-largest_biome_intersection |> 
-  group_by(largest_biome) |> 
-  summarise(
-    biomes = n()
-  )
-```
-
-### AMCs with biomes
+If we check, we see that we ended up with the same totals as the official list from IBGE.
 
 ```{r}
-x <- muni_with_biomes |> 
-  filter(
-    cerrado
-  ) 
-```
-
-```{r}
-amc_1991_with_biomes <- bind_cols(
-  amc_1991,
-  
-  # intersection AMCs and biomes
-  st_intersects(
-    amc_1991,
-    biomes,
-    sparse = FALSE
+main_biome_muni |> 
+  group_by(
+    main_biome
   ) |> 
-  as_tibble(.name_repair="minimal") |> 
-  setNames(
-    biomes$name_biome
-  ) 
-) |> 
+  summarise(
+    municipalities = n()
+  )
+```
+
+## AMC \~ Biome intersections
+
+Now, I'll replicate with the amcs what was done with municipalities. First, I calculate the AMCs areas.
+
+```{r}
+amc_1991_2022 <- amc_1991_2022 |>
+  mutate(
+    area_amc = st_area(geom)
+    )
+```
+
+Then, I apply the intersection.
+
+```{r}
+intersections <- st_intersection(
+  amc_1991_2022, 
+  biomes
+  ) |>
+  # Correct faulty polygons
+  st_make_valid() |> 
+  # Calculate intersection area
+  mutate(
+    area_intersection = st_area(geom)
+  )
+
+```
+
+And finally, find the main biome in each AMC, and calculate it's share of the area.
+
+```{r}
+main_biome_amc <- intersections |>
+  as_tibble(
+  ) |> 
+  group_by(
+    code_amc
+  ) |>
+  # Find the biome with the largest area of intersection
+  slice_max(
+    area_intersection, 
+    n = 1, 
+    with_ties = FALSE
+  ) |>
+  ungroup(
+  ) |>
+  mutate(
+    # Calculate the percentage covered by the largest biome
+    share_biome = as.numeric(area_intersection) / as.numeric(area_amc)
+  ) |>
   select(
-    -sistema_costeiro
+    code_amc,
+    area_amc,
+    area_biome = area_intersection,
+    main_biome = name_biome,
+    code_biome,
+    share_biome
+  )
+```
+
+I'll append this information to our original `muni_to_amc` dataframe.
+
+```{r}
+muni_to_amc <- left_join(
+  muni_to_amc,
+  # Append only main biome
+  main_biome_amc |> 
+    as_tibble() |> 
+    select(code_amc, main_biome, code_biome),
+  
+  by = "code_amc"
   )
 ```
 
@@ -399,13 +467,15 @@ amc_1991_with_biomes <- bind_cols(
 
 ```{r}
 bulk_write_rds(
-  cattle_heads_ppm,
-  cattle_sales_census, 
-  cattle_prices_2017_census,
   municipalities, 
   conservation_units, 
   indigenous_lands,
+  # amc
   muni_to_amc,
-  biomes
+  amc_1991_2022,
+  # biomes
+  biomes,
+  main_biome_muni,
+  main_biome_amc
   )
 ```
