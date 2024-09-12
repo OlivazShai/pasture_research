@@ -243,3 +243,57 @@ cattle_prices_2017_census <- cattle_sales_census %>%
    average_price
   )
 ```
+
+# 1995 census
+
+```{r}
+census_1995 <- get_sidra(
+    x = 324, # Cattle headcounts and sales
+    variable = 105, # Herd population
+    classific = c("c224"), # Species
+    category = list("4823"), # Bovine
+    geo = "City", # Municipality level data
+    format = 3, # Names and codes for geo levels  
+    digits = "max" # Maximum digits
+  ) 
+```
+
+Cleaning.
+
+```{r}
+cattle_heads_census_1995 <- census_1995 |> 
+  select(
+    cattle_heads = Valor,
+    code_muni = `Município (Código)`
+  )
+```
+
+And by AMC.
+
+```{r}
+shares_by_amc <- left_join(
+  cattle_heads_census_1995,
+  # get amc data
+  muni_to_amc |> 
+    as_tibble() |> 
+    select(code_amc, code_muni, code_biome, main_biome),
+  
+  by = "code_muni"
+  ) |>
+  # dissolve by amc
+  select( 
+    ! code_muni
+  ) |> 
+  summarise(
+    cattle_heads = sum(cattle_heads, na.rm = TRUE),
+    .by = c(code_amc, code_biome, main_biome)
+  ) |> 
+  # get proportion to totals
+  mutate(
+    share = cattle_heads / sum(cattle_heads, na.rm = TRUE)
+  )
+```
+
+```{r}
+bulk_write_rds(shares_by_amc)
+```
