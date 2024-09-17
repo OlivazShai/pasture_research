@@ -117,6 +117,27 @@ cattle_heads_ppm <- ppm %>%
   relocate(year, code_muni, name_muni, code_state, name_state, cattle_heads)
 ```
 
+I'll agregate ppm data by amc.
+
+```{r}
+cattle_heads_ppm <- cattle_heads_ppm |>
+  left_join(
+    muni_to_amc |> 
+      as_tibble() |>
+      select(code_amc, code_muni, code_biome, main_biome),
+    
+    by = "code_muni"
+  ) |> 
+  # dissolve by amc
+  select( 
+    year, cattle_heads, code_amc, code_biome, main_biome
+  ) |> 
+  summarise(
+    cattle_heads = sum(cattle_heads, na.rm = TRUE),
+    .by = c(year,code_amc, code_biome, main_biome)
+  )
+```
+
 # Census Data (Sidra)
 
 ## 2017 Census data
@@ -222,25 +243,45 @@ remove(census_names, census_variables, i)
 
 Now, I'll use census sales data to extract average cattle price per municipality. I only use sales for slaughter from large farms.
 
+I'll agregate by AMC.
+
 ```{r}
-cattle_prices_2017_census <- cattle_sales_census %>%
-  replace(
-    is.na(.), 0
-  ) %>% 
-  mutate(
-    average_price =
-      (sales_value_big_slaughter)/
-      (heads_sold_big_slaughter)
-  ) %>% 
-  drop_na(
-    average_price
-  ) %>% 
+cattle_prices_2017_census <- cattle_sales_census  |> 
   select(
    code_muni,
    name_muni,
    code_state,
    name_state,
-   average_price
+   sales_value_big_slaughter,
+   heads_sold_big_slaughter
+  ) |> 
+  # join amc
+  left_join(
+    muni_to_amc |> 
+      as_tibble() |> 
+      select(code_amc, code_muni, code_biome, main_biome),
+    
+    by = "code_muni"
+  ) |> 
+  select( 
+    code_amc, code_biome, main_biome,
+    sales_value_big_slaughter,
+    heads_sold_big_slaughter
+  ) |> 
+  summarise(
+    sales_value_big_slaughter = sum(sales_value_big_slaughter, na.rm = TRUE),
+    heads_sold_big_slaughter = sum(heads_sold_big_slaughter, na.rm = TRUE),
+
+    .by = c(code_amc, code_biome, main_biome)
+  ) |>
+  # average price by amc
+  mutate(
+    average_price =
+      (sales_value_big_slaughter)/
+      (heads_sold_big_slaughter)
+  ) |>
+  drop_na(
+    average_price
   )
 ```
 

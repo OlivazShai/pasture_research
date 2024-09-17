@@ -23,8 +23,9 @@ library(ggplot2)
 # Geographic
 library(sf)
 
-# Statistics
+# Econometrics
 library(plm)
+library(fixest)
 ```
 
 # Importing files
@@ -60,7 +61,7 @@ summary(pasture_intensity$intensity)
 
 # Local prices panel
 
-## Panel creation 
+## Panel creation
 
 ```{r}
 panel_1 <- left_join(
@@ -111,7 +112,6 @@ panel_1 <- left_join(
     amazonia == TRUE
   )
 ```
-
 
 ```{r}
 panel_2 <- 
@@ -261,7 +261,6 @@ print(phi1_log)
 
 ### Log and time trend
 
-
 ```{r}
 model_4 <- plm(
   log(cattle_heads) ~ local_price + lag(local_price) + as.numeric(year) | . - local_price + shifter,
@@ -282,7 +281,6 @@ print(phi1)
 
 ### Level and time trend
 
-
 ```{r}
 model_5 <- plm(
   cattle_heads ~ local_price + lag(local_price) + as.numeric(year) | . - local_price + shifter,
@@ -301,8 +299,7 @@ phi1 = - delta * as.vector(model_5$coefficients)[1]
 print(phi1)
 ```
 
-
-# Testing Outliers    
+# Testing Outliers
 
 ```{r}
 a <- panel_1 %>%
@@ -391,6 +388,7 @@ model_d <- plm(
 
 summary(model_d)
 ```
+
 # Stargazer
 
 ```{r}
@@ -398,6 +396,7 @@ library(stargazer)
 ```
 
 First stage
+
 ```{r}
 stargazer(
   s1,
@@ -424,7 +423,6 @@ stargazer(
 
 Log baseline.
 
-
 ```{r}
 stargazer(
   model_3,
@@ -437,6 +435,4 @@ stargazer(
   )
 ```
 
-
 With other shifter (BRL):
-
