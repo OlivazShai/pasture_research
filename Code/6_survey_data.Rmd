@@ -132,7 +132,7 @@ cattle_heads_ppm <- ppm |>
   relocate(year, code_muni, name_muni, code_state, name_state, cattle_heads)
 ```
 
-I'll agregate ppm data by amc.
+I'll aggregate ppm data by AMC.
 
 ```{r}
 cattle_heads_ppm <- cattle_heads_ppm |>
@@ -156,6 +156,8 @@ cattle_heads_ppm <- cattle_heads_ppm |>
 # Census 2017
 
 ## Loading data
+
+I loop the loading on each of the 12 Variables of interest. First I define their codes, then their variable names. Cleaning is preformed during right after the download, so the resulting data frame already tidied-up.
 
 ```{r}
 census_variables = c(
@@ -270,15 +272,23 @@ remove(census_name_i, census_variable_i, i)
 
 ```
 
+Removing auxiliary variables.
+
 ```{r}
 remove(census_names, census_variables)
 ```
 
-## 2017 Average Prices
+## Average Prices in 2017
 
-Now, I'll use census sales data to extract average cattle price per municipality. I only use sales for slaughter from large farms.
+I'll aggregate by AMC, so first I need to source my municipality to AMC "translator".
 
-I'll agregate by AMC.
+```{r}
+bulk_read_rds(muni_to_amc)
+```
+
+Now, I'll use census sales data to extract average cattle price per municipality. I only use sales **for slaughter** and **from larger farms**.
+
+CORRECT THIS TO KEEP THE HEAD COUNTS!
 
 ```{r}
 cattle_prices_census_2017 <- cattle_census_2017  |> 
@@ -440,24 +450,15 @@ names = list(
     "sales_value_big_slaughter_female"
   )
 )
-
-
-
-filter_list = list(
-  # North
-  list("Region" = 1),
-  # Northeast
-  list("Region" = 2),
-  # Southeast
-  list("Region" = 3),
-  # South
-  list("Region" = 4),
-  # Midwest
-  list("Region" = 5)
-)
 ```
 
 ## Loading data
+
+When loading, due to file size, segmentation is necessary. I apply a segmentation by region. For unknown reasons, the IGBE API returns repeated data, as some municipalities in Tocantins are classified as both from region 1 (Norte) and region 5 (Centro-oeste). The data returned is the same in both instances. To correct for this, I simply remove duplicated rows (which would not work if the data was different when loaded from each region). This correction only happens if duplicates are found, so if the API is updated the duplicate removal will be superfluous and won't be run.
+
+This code is different to the loading of IBGE data from census 2017, because for that year, all relevant data comes from the same "Table", but from different "Variables". "Tables" are different sources and "Variables" are distinct informations in each Table. What constitutes a Table or a Variable in the IBGE database is somewhat arbitrary.
+
+This code loops on Tables and on Regions. I also further segment the loading process, with a simpler approach used for tables 1 and 2, which don't have different classifications. For Table 3 (from which I get 2 variables), data is segmented by a classification, describing if sales are for breeding, finishing, or slaughter. Hence, for these Variables I also pivot the data before merging.
 
 ```{r}
 for (i in 1:4) {
@@ -525,7 +526,7 @@ for (i in 1:4) {
           j, 
           "\n Removing duplicates...")
         
-        census_aggregated <- census_aggregated  %>%
+        census_aggregated <- census_aggregated  |>
           distinct(
             name_muni, 
             code_muni,
@@ -603,7 +604,7 @@ for (i in 1:4) {
           j, 
           "\n Removing duplicates...")
         
-        census_aggregated <- census_aggregated  %>%
+        census_aggregated <- census_aggregated  |>
           distinct(
             name_muni, 
             code_muni,
@@ -622,8 +623,20 @@ for (i in 1:4) {
   }
 }
 
-remove(name_i, i)
+remove(name_i, i, j, census_i, census_aggregated)
 
 ```
 
-# Tests
+And removing auxiliary variables.
+
+```{r}
+rm(x,v,c,cat,names)
+```
+
+## Average prices
+
+# Saving RDS
+
+```{r}
+bulk_write_rds(cattle_census_2006)
+```
