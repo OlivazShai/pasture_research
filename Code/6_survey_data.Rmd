@@ -54,7 +54,9 @@ amazon_states = c(
   )
 ```
 
-# PPM Data (Sidra)
+# PPM
+
+## Loading data
 
 Cattle stock by municipality, from 1995 to 2022.
 
@@ -106,7 +108,7 @@ for (filter in filter_list) {
 rm(x, filter, filter_list)
 ```
 
-Cleaning data.
+## Cleaning
 
 ```{r}
 cattle_heads_ppm <- ppm |> 
@@ -382,7 +384,7 @@ bulk_write_rds(shares_by_amc)
 
 # Census 2006
 
-## Loading data
+## Defining categories to load
 
 ```{r}
 x = c(
@@ -438,71 +440,144 @@ names = list(
     "sales_value_big_slaughter_female"
   )
 )
+
+
+
+filter_list = list(
+  # North
+  list("Region" = 1),
+  # Northeast
+  list("Region" = 2),
+  # Southeast
+  list("Region" = 3),
+  # South
+  list("Region" = 4),
+  # Midwest
+  list("Region" = 5)
+)
 ```
+
+## Loading data
 
 ```{r}
 for (i in 1:4) {
   name_i = names[[i]]
-  print(i)
   
-  # for the first two tables
+  # Show progress
+  cat("Table: ", i ," - ",  name_i, "\n")
+  
+  
+  ####################################################
+  # For the first two tables
+  
   if (i <= 2) {
-
-  census_i <- get_sidra(
-    x = x[i], 
-    variable = v[i],
-    classific = c[[i]],
-    category = cat[[i]],
-    geo = "City", # Municipality level data
-    format = 3, # Names and codes  
-    digits = "max" # Maximum digits
-    ) |> 
-    # save as tibble
-    as_tibble(
-    ) |> 
-    # Cleaning
-    rename(
-      "code_muni" = "Município (Código)",
-      "name_muni" = "Município"
-    ) |>
-    rename_with(
-      .cols = "Valor",
-      .fn = \(x) name_i
-    ) |> 
-    select(
-      name_muni,
-      code_muni,
-      {{name_i}}
-    ) |> 
-    mutate(
-      name_state = str_split_i(name_muni, " - ", 2),
-      code_state = str_sub(code_muni, start = 1, end = 2),
-      name_muni = str_split_i(name_muni, " - ", 1)
-    ) |> 
-    relocate(name_muni, code_muni, name_state, code_state, {{name_i}})
-  
-  # for last two tables
-  } else {
     
-    census_i <- get_sidra(
-      x = x[i], 
-      variable = v[i],
-      classific = c[[i]],
-      category = cat[[i]],
-      geo = "City", # Municipality level data
-      format = 3, # Names and codes  
-      digits = "max" # Maximum digits
-      ) |>
-      # save as tibble
-      as_tibble(
+    # Initialize an empty data frame for aggregated results
+    census_aggregated <- tibble()
+    
+    # Inner loop through each geo filter
+    for (j in 1:5) {
+      
+      # Show progress
+      cat("Geo filter: Region ", j, "\n")
+      
+      census_i <- get_sidra(
+        x = x[i], 
+        variable = v[i],
+        classific = c[[i]],
+        category = cat[[i]],
+        geo = "City", # Municipality level data
+        geo.filter = list("Region" = j),  # Apply the current filter
+        format = 3, # Names and codes  
+        digits = "max" # Maximum digits
       ) |> 
+      # save as tibble
+      as_tibble() |> 
       # Cleaning
+      rename(
+        "code_muni" = "Município (Código)",
+        "name_muni" = "Município"
+      ) |>
+      rename_with(
+        .cols = "Valor",
+        .fn = \(x) name_i
+      ) |> 
+      select(
+        name_muni,
+        code_muni,
+        {{name_i}}
+      )
+      
+      # Append results for the current filter to the aggregated data frame
+      census_aggregated <- bind_rows(census_aggregated, census_i)
+      
+      
+      # Checking for Duplicates
+      
+      if (any(duplicated(census_i))) {
+        cat("Duplicates detected in census_i, region:", j)
+      }
+      
+      if (any(duplicated(census_aggregated))) {
+      
+        cat(
+          "Duplicates detected in census_aggregated, region ",
+          j, 
+          "\n Removing duplicates...")
+        
+        census_aggregated <- census_aggregated  %>%
+          distinct(
+            name_muni, 
+            code_muni,
+            .keep_all = TRUE)
+        }
+      
+    }
+    
+    # Use census_aggregated for further processing
+    cattle_census_2006 <- if (i == 1) {
+      census_aggregated
+    } else {
+      full_join(
+        cattle_census_2006, 
+        census_aggregated, 
+        by = join_by(code_muni, name_muni)
+        )
+    }
+    
+    cat("done", "\n")
+    
+    ####################################################
+    # For last two tables 
+    
+    } else {
+    
+    # Initialize for aggregated results
+    census_aggregated <- tibble()
+    
+    # Inner loop through each geo filter
+    for (j in 1:5) {
+      
+      # Show progress
+      cat("Geo filter: Region ", j, "\n")
+      
+      census_i <- get_sidra(
+        x = x[i], 
+        variable = v[i],
+        classific = c[[i]],
+        category = cat[[i]],
+        geo = "City", # Municipality level data
+        geo.filter = list("Region" = j),  # Apply the current filter
+        format = 3, # Names and codes  
+        digits = "max" # Maximum digits
+      ) |> 
+      as_tibble() |> 
       select(
         "valor" = "Valor",
         "code_muni" = "Município (Código)",
         "name_muni" = "Município",
         "category" = "Movimento pecuário de bovinos vendidos nos estabelecimentos agropecuários com mais de 50 cabeças em 31/12"
-      ) |>    
+      ) |> 
       pivot_wider(
         names_from = category,
         values_from = valor
@@ -510,33 +585,41 @@ for (i in 1:4) {
       rename_with(
         .cols = 3:8,
         .fn = \(x) name_i
-      ) |> 
-      mutate(
-        name_state = str_split_i(name_muni, " - ", 2),
-        code_state = str_sub(code_muni, start = 1, end = 2),
-        name_muni = str_split_i(name_muni, " - ", 1)
       ) 
+      
+      # Append results for the current filter to the aggregated data frame
+      census_aggregated <- bind_rows(census_aggregated, census_i)
     }
-  
-  
-  # Joining variables
-  if (i == 1) {
-    cattle_census_2006 = census_i
-    print("done")
     
-  } else {
-    cattle_census_2006 = full_join(
+      # Checking for Duplicates
+      if (any(duplicated(census_i))) {
+        cat("Duplicates detected in census_i, region:", j)
+      }
+      
+      if (any(duplicated(census_aggregated))) {
+      
+        cat(
+          "Duplicates detected in census_aggregated, region ",
+          j, 
+          "\n Removing duplicates...")
+        
+        census_aggregated <- census_aggregated  %>%
+          distinct(
+            name_muni, 
+            code_muni,
+            .keep_all = TRUE)
+        }
+    
+    
+    # Use census_aggregated for further processing
+    cattle_census_2006 <- full_join(
       cattle_census_2006,
-      census_i,
-      by = join_by(
-        "name_muni", "code_muni", "name_state", "code_state"
-      )
+      census_aggregated,
+      by = join_by(code_muni, name_muni)
     )
     
-    print("done")
-    rm(census_i)
-    }
-  
+    cat("done", "\n")
+  }
 }
 
 remove(name_i, i)
@@ -544,34 +627,3 @@ remove(name_i, i)
 ```
 
 # Tests
-
-```{r}
-a <- get_sidra(
-      x = x[i], 
-      variable = v[i],
-      classific = c[[i]],
-      category = cat[[i]],
-      geo = "City", # Municipality level data
-      geo.filter = list("Region" = 1),
-      format = 3, # Names and codes  
-      digits = "max" # Maximum digits
-      ) 
-```
-
-```{r}
-b <- a |>
-      select(
-        "valor" = "Valor",
-        "code_muni" = "Município (Código)",
-        "name_muni" = "Município",
-        "category" = "Movimento pecuário de bovinos vendidos nos estabelecimentos agropecuários com mais de 50 cabeças em 31/12"
-      ) |>    
-      pivot_wider(
-        names_from = category,
-        values_from = valor
-      ) |> 
-  rename_with(
-    .cols = 3:8,
-    .fn = \(x) name_i
-  )
-```
