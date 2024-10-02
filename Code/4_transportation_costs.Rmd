@@ -40,11 +40,11 @@ transport_cost <- rast(
 ```{r}
 municipalities_tc <- read_rds(
   file = "../Variables/municipalities.rds"
-  ) %>%
+  ) |>
   # match crs with raster
   st_transform(
     crs(transport_cost)
-  ) %>%
+  ) |>
   # save with terra
   vect()
 ```
@@ -56,15 +56,15 @@ There are two groups of Conservation Units. Integral Protection (PI) areas have 
 ```{r}
 conservation_units_tc <- read_rds(
   file = "../Variables/conservation_units.rds"
-  ) %>%
+  ) |>
   # filter only Integral Protection
   filter(
     group == "PI"
-  ) %>% 
+  ) |> 
   # match crs with raster
   st_transform(
     crs(transport_cost)
-  ) %>%
+  ) |>
   # save with terra
   vect()
 ```
@@ -74,11 +74,11 @@ conservation_units_tc <- read_rds(
 ```{r}
 indigenous_lands_tc <- read_rds(
   file = "../Variables/indigenous_lands.rds"
-  ) %>%
+  ) |>
   # match crs with raster
   st_transform(
     crs(transport_cost)
-  ) %>%
+  ) |>
   # save with terra
   vect()
 ```
@@ -92,12 +92,12 @@ I use a raster of quality adjusted transportation cost to major ports, developed
 Here I'll remove conservation units and indigenous lands from the cost raster.
 
 ```{r}
-transport_cost_unprotected <- transport_cost %>% 
+transport_cost_unprotected <- transport_cost |> 
   # cut conservation units
   mask(
     conservation_units_tc, 
     inverse = TRUE
-  ) %>% 
+  ) |> 
   # cut indigenous lands
   mask(
     indigenous_lands_tc, 
@@ -115,16 +115,16 @@ transport_cost_muni <- extract(
   fun = mean, 
   na.rm = TRUE,
   touches = TRUE,
-  bind = TRUE) %>% 
+  bind = TRUE) |> 
   # return to sf format
-  st_as_sf() %>% 
+  st_as_sf() |> 
   rename(
     transport_cost = cost_raster_raster_proj
-  ) %>% 
+  ) |> 
   # reverse CRS to standard
   st_transform(
     st_crs(municipalities)
-  ) %>% 
+  ) |> 
   # filter to amazon
   filter(
     code_state %in% amazon_states
@@ -168,14 +168,14 @@ write_rds(
 sh <- st_read(
   "../Inputs/slaughterhouses/limites_frigorificos_2021.shp",
   quiet = T
-  ) %>% 
+  ) |> 
   st_transform(
     crs = st_crs(municipalities)
   )
 ```
 
 ```{r}
-sh_active <- sh %>% 
+sh_active <- sh |> 
   filter(
     situacao == "Ativo"
   )
@@ -198,7 +198,7 @@ ggplot() +
     axis.ticks=element_blank()
     ) +
   geom_sf(
-    data = sh %>% 
+    data = sh |> 
       filter() ,
     aes(
       geometry = geometry,
@@ -208,29 +208,29 @@ ggplot() +
 ```
 
 ```{r}
-sh_distance <-  municipalities %>%
+sh_distance <-  municipalities |>
   mutate(
     centroid = st_centroid(geom)
-  ) %>%
+  ) |>
   mutate(
     nearest_point_index = st_nearest_feature(centroid, sh_active)
-  ) %>%
+  ) |>
   mutate(
     distance_to_sh = st_distance(
       centroid, 
       sh_active[nearest_point_index, ], 
       by_element = TRUE)
-  ) %>% 
+  ) |> 
   mutate(
     distance_to_sh = as.numeric(distance_to_sh)/1000 #change to km
-  ) %>%
+  ) |>
   select(-nearest_point_index) 
 ```
 
 ```{r}
 ggplot() +
   geom_sf(
-    data = sh_distance %>% 
+    data = sh_distance |> 
       filter(code_state %in% amazon_states),
     aes(
       geometry = geom,
@@ -260,16 +260,18 @@ For now, we'll simply repeat data from 2000's to each municipality, using the AM
 ```{r}
 market_acess_by_muni <- left_join(
   # AMCs in 1991 by municipalities
-  amc_1991_by_muni %>% 
-    as_tibble() %>% 
+  amc_1991_by_muni |> 
+    as_tibble() |> 
     select(code_amc, muni),
   # Market access by AMC
-  market_access %>% 
+  market_access |> 
     select(amc, "2000"),
   by = join_by("code_amc" == "amc")
-  ) %>% 
+  ) |> 
   mutate(
     market_access_2000 = `2000`/max(`2000`, na.rm = TRUE)*100
-  ) %>% 
+  ) |> 
   select(-c("2000"))
 ```
+
+GET BY NEW AMC

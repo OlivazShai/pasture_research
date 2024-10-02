@@ -50,3 +50,6 @@ rsconnect/
 .RData
 .RData
 .RData
+Variables/baci_raw.rds
+Variables/muni_to_amc.rds
+Variables/municipalities.rds

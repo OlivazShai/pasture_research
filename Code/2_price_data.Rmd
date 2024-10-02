@@ -75,16 +75,16 @@ prices_chicken <- read_xlsx(
 Reference period for the 2017 census is *Oct 01 2016* through *Sep 30 2017*. Here I'll extract the average CEPEA price for this period.
 
 ```{r}
-cattle_price_2017_cepea <- prices_cattle %>% 
+cattle_price_2017_cepea <- prices_cattle |> 
   mutate(
     date = as_date(date, format = "%d/%m/%Y")
-  ) %>% 
+  ) |> 
   filter(
     date > "2016-10-01" & date < "2017-09-30"
-  ) %>% 
+  ) |> 
   summarise(
     mean_price = mean(price_brl)
-  ) %>% 
+  ) |> 
   as.numeric()
 ```
 
@@ -93,60 +93,62 @@ cattle_price_2017_cepea <- prices_cattle %>%
 ```{r}
 national_prices <- full_join(
   # Yearly cattle prices
-  prices_cattle %>% 
+  prices_cattle |> 
     mutate(
       date = as_date(date, format = "%d/%m/%Y")
-    ) %>% 
+    ) |> 
     group_by( 
       year = year(date)
-    ) %>% 
+    ) |> 
     summarise(
       cattle_price = mean(price_brl),
       cattle_price_usd = mean(price_usd)
     ),
   # Yearly soybean prices
-  prices_soybeans %>% 
+  prices_soybeans |> 
     mutate(
       date = as_date(date, format = "%d/%m/%Y")
-    ) %>% 
+    ) |> 
     group_by( 
       year = year(date)
-    ) %>% 
+    ) |> 
     summarise(
       soy_price = mean(price_brl),
       soy_price_usd = mean(price_usd)
     ),
   
   by = "year"
-  ) %>% 
+  ) |> 
   full_join(
   # Yearly maize prices
-  prices_maize %>% 
+  prices_maize |> 
     mutate(
       date = as_date(date, format = "%d/%m/%Y")
-    ) %>% 
+    ) |> 
     group_by( 
       year = year(date)
-    ) %>% 
+    ) |> 
     summarise(
       maize_price = mean(price_brl),
       maize_price_usd = mean(price_usd)
     ),
+  
   by = "year"
-  ) %>% 
+  ) |> 
   full_join(
   # Yearly chicken prices
-  prices_chicken %>% 
+  prices_chicken |> 
     mutate(
       date = as_date(date, format = "%d/%m/%Y")
-    ) %>% 
+    ) |> 
     group_by( 
       year = year(date)
-    ) %>% 
+    ) |> 
     summarise(
       chicken_price = mean(price_brl),
       chicken_price_usd = mean(price_usd)
     ),
+  
   by = "year"
   )
 ```

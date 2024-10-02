@@ -11,10 +11,12 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r, include=FALSE}
 # Data Wrangling
+library(data.table)
 library(dplyr)
 library(tidyr)
 library(stringr)
 library(readr)
+library(dtplyr)
 
 # Graphics
 library(ggplot2)
@@ -23,14 +25,253 @@ library(ggplot2)
 library(sf)
 library(sidrar)
 library(geobr)
-library(datazoom.amazonia)
+library(datazoom.amazonia) #development version
+
+# Econometrics
+library(fixest)
 
 # Personal functions
 source("../Functions/functions.R")
+source("../Functions/baci_cleaner.R")
 ```
 
-# BACI data
+```{r, include=FALSE, eval=FALSE}
+
+library(devtools)
+
+# Datazoom development version
+devtools::install_github("OlivazShai/datazoom.amazonia")
+```
+
+# BACI data importing
+
+## Importing BACI data
+
+Here, I download the trade data using the `datazoom.amazonia` package. Note that I need (as per September 2024) to use the development version of the `datazoom.amazonia` package. The CRAN published version had old data which was unavailable, so I corrected the links and included the most up to date BACI files. I also corrected a faulty procedure that deterred the download of multiple years at once.
+
+Ensure there's enough memory, I follow the process in this [stackoverflow](https://stackoverflow.com/questions/51248293/error-vector-memory-exhausted-limit-reached-r-3-5-0-macos){.uri} issue.
+
+```{r, eval=FALSE, include=FALSE}
+gc()
+library(usethis) 
+usethis::edit_r_environ() # Include R_MAX_VSIZE=100Gb
+```
 
 ```{r}
+baci_raw <- load_baci(
+  # treated data crashes, so I download raw 
+  raw_data = TRUE,
+  # to download the entire series
+  time_period = 1995:2022  
+  )
+```
 
+This process yields a list of 28 vectors, one for each year. Variables are:
+
+| Variable | Description                                        |
+|----------|----------------------------------------------------|
+| `t`      | Year                                               |
+| `k`      | Product category (HS 6-digit code)                 |
+| `i`      | Exporter (ISO 3-digit country code)                |
+| `j`      | Importer (ISO 3-digit country code)                |
+| `v`      | Value of the trade flow (in thousands current USD) |
+| `q`      | Quantity (in metric tons)                          |
+
+To avoid dealing with this (huge) file all the time in the environment, I save it serialized and reuse when needed. Even serialized, it is too heavy to push to github, so I'll maintain locally.
+
+```{r}
+bulk_write_rds(baci_raw)
+```
+
+## Importing product and country codes
+
+Products:
+
+```{r}
+baci_product_codes <- read_csv(
+  file = "../Inputs/BACI/product_codes_HS92_V202401b.csv",
+  col_types = "c"
+)
+```
+
+Countries:
+
+```{r}
+baci_country_codes <- read_csv(
+  file = "../Inputs/BACI/country_codes_V202401b.csv",
+  col_types = "c"
+)
+```
+
+Importantly, `Brazil = 76` and `China = 156`.
+
+## Selecting products
+
+I select only bovine meat products.
+
+```{r}
+baci_product_codes %>% 
+  filter(
+    str_detect(description,"Meat: of bovine animals")
+  ) 
+```
+
+And I define a vector with only the codes for use in the (near) future .
+
+```{r}
+bovine_products <- baci_product_codes %>% 
+  filter(
+    str_detect(description,"Meat: of bovine animals")
+  ) %>%
+  # Get code as numeric (to match how baci data is saved)
+  transmute(
+    code_numeric = as.numeric(code)
+  ) %>%
+  # define as vector
+  pull()
+  
+```
+
+# BACI data cleaning
+
+## Subset of selected products
+
+Here, I extract information on Brazilian exports to China of each bovine meat product, for each year. This considerably reduces the space occupied by BACI data. Since we only need data from these products, I'll use this data frame from now on.
+
+```{r}
+bulk_read_rds(baci_raw)
+
+baci_bovine <- lapply(
+  # complete dataset
+  baci_raw,
+  # selecting bov prods in each dataframe
+  \(x) get_product_trade(x, bovine_products)
+  ) %>% 
+  # bind as data.table
+  data.table::rbindlist()
+
+rm(baci_raw)
+```
+
+Saving serialized:
+
+```{r}
+bulk_write_rds(baci_bovine)
+```
+
+## Brazilian exports to China
+
+First, I'll explore which of the bovine products are exported from Brazil to China.
+
+```{r}
+baci_bovine %>% 
+  filter(
+    i == 76, #Brazil
+    j == 156 #China
+  )
+```
+
+Notice the lion's share of beef exports are of the *020230* (*Meat: of bovine animals, boneless cuts, frozen*) specification. It is also the only one with reliable flow every year, allowing the intended comparisons. So, from now on, I'll restrict the analysis to only this specific product.
+
+```{r}
+baci_bovine %>% 
+  filter(
+    k == 20230,
+    i == 76, #Brazil
+    j == 344, #China
+    )
+```
+
+I'll extract the quantity of brazilian exports of bovine meat to China in 2000.
+
+```{r}
+br_to_ch_2000 <- baci_bovine %>% 
+  filter(
+    k == 20230,
+    i == 76, #Brazil
+    j == 344, #China
+    t == 2000
+    ) |> 
+  pull(var = q)
+```
+
+## Aggregated imports by country-year
+
+I'll aggregate all trade flows by importer country, excluding Brazil both as importer and as exporter. Selecting only product *020230*.
+
+```{r}
+bovine_imports <- baci_bovine |> 
+  filter(
+    # remove Brazil as exporter and importer
+    ! i == 76, 
+    ! j == 76,
+    # consider only 020230
+    k == 20230
+  ) |> 
+  # aggregate by year and importer 
+  summarise(
+    q = sum(q, na.rm = TRUE),
+    v = sum(v, na.rm = TRUE),
+    .by = c(t, j)
+  ) |> 
+  # fixate imports in 2000
+  group_by(
+    j
+  ) |> 
+  mutate(
+    q_2000 = if_else(t == 2000, q, NA)
+  ) |> 
+  fill(
+    q_2000
+  ) |>
+  # calculate growth rate
+  # and define a china dummy
+  mutate(
+    G = (q - q_2000)/q_2000,
+    china = if_else(j == 156, 1, 0)
+  ) |> 
+  # remove NA growth and years before 2000
+  filter(
+    t > 1999,
+    ! is.na(G)
+  )
+```
+
+```{r}
+bulk_write_rds(bovine_imports)
+```
+
+# Auxiliary regressions
+
+To extract the china shock, I regress the growth rate with respect to 2000 (`G)` against a china dummy interacted with year fixed effects. This extracts the china specific shock each year. Model `m1` doesn't employ weights and model `m2` uses starting-point import flows as weights.
+
+```{r}
+w <- bovine_imports$q_2000
+
+m1 <- feols(
+  G ~ china:i(t) | t,
+  data = bovine_imports,
+  weights = w
+  )
+
+etable(m1)
+```
+
+I extract these coefficients as the `psi` china shocks. I also include the initial brazilian exports to China in 2000.
+
+```{r}
+china_shock <- tidy(m1) |> 
+  select(
+    psi = estimate
+  ) |> 
+  mutate(
+    # include year
+    year = 2000:2022,
+    # include initial exports
+    x = br_to_ch_2000
+  )
+```
+
+```{r}
+bulk_write_rds(china_shock)
 ```

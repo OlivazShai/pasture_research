@@ -1,0 +1,155 @@
+---
+title: "Instruments"
+author: "Shai Vaz"
+date: "2024-09-12"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+# Data Wrangling
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(readr)
+
+# Graphics
+library(ggplot2)
+
+# Geographic
+library(sf)
+library(sidrar)
+library(geobr)
+library(datazoom.amazonia)
+
+# Personal functions
+source("../Functions/functions.R")
+
+library(plm)
+```
+
+# Importing separate data
+
+```{r}
+bulk_read_rds(
+  china_shock,
+  shares_by_amc
+)
+```
+
+# SSIV
+
+## Agregating data
+
+```{r}
+ssiv <- cross_join(
+  shares_by_amc,
+  china_shock
+  ) |>
+  left_join(
+    amc_1991_2022 |> 
+      as_tibble() |> 
+      select(code_amc, area_amc),
+    
+    by = "code_amc"
+  ) |> 
+  # calculate ssiv
+  mutate(
+    area_amc = set_units(area_amc, "ha") |> as.numeric(),
+    ssiv = share * psi * x
+  ) 
+```
+
+```{r}
+bulk_write_rds(ssiv)
+```
+
+# Painel
+
+These are just sketches, not precise!
+
+```{r}
+y <- left_join(
+  cattle_heads_ppm,
+  cattle_prices_2017_census |> 
+    select(
+      !c(
+        heads_sold_big_slaughter,
+        sales_value_big_slaughter
+      )
+    ),
+  
+  by = join_by("code_amc", "code_biome", "main_biome")
+  ) |> 
+  mutate(
+    year = as.integer(year)
+  ) |> 
+  left_join(
+    ssiv |>  
+      select(1:3, year, ssiv),
+  by = join_by("year", "code_amc", "code_biome", "main_biome")
+  ) |> 
+  # national prices
+  left_join(
+    national_prices,
+    by = "year"
+  ) |>  
+  mutate(
+    local_price = cattle_price * average_price * 1000/cattle_price_2017_cepea
+  ) |> 
+  select(
+    ! c(soy_price, maize_price)
+  ) |> 
+  mutate(
+    lag_local_price = dplyr::lag(local_price),
+    lag_ssiv = dplyr::lag(ssiv),
+    .by = code_amc
+  ) |> 
+  filter(
+     year == 2017
+  )
+```
+
+# Regression
+
+```{r}
+amazonia <- y |> 
+  filter(
+    code_biome == 1
+  ) 
+
+cerrado <- y |> 
+  filter(
+    code_biome == 3
+  )
+```
+
+```{r}
+m1 <- lm(
+  cattle_heads ~ local_price + lag_local_price | lag_local_price +  ssiv,
+  data = cerrado,
+  index = c("code_amc", "year"),
+  model = "within",
+  effect = "individual"
+)
+
+
+m2 <- feols(
+  cattle_heads ~ 1 | local_price + lag_local_price ~ ssiv,
+  data = cerrado
+)
+
+summary(m1)
+
+etable(m2)
+```
+
+```{r}
+delta = 1/as.vector(m1$coefficients)[2]*1/0.9
+phi1 = - delta * as.vector(m1$coefficients)[1]
+
+print(phi1)
+```
