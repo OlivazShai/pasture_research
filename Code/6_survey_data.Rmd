@@ -633,8 +633,6 @@ And removing auxiliary variables.
 rm(x,v,c,cat,names)
 ```
 
-## Average prices
-
 # Saving RDS
 
 ```{r}
