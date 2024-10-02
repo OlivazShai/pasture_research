@@ -1,0 +1,119 @@
+---
+title: "Evaluation of 2017 and 2006 census prices"
+author: "Shai Vaz"
+date: "2024-10-02"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Long - wide version
+
+This is a version to try a plot.
+
+```{r}
+x <- agg_census_data |> 
+  filter(
+    code_biome == 1
+  ) |>
+  select(
+    year,
+    code_amc,
+    av_price_breed:av_price
+  ) |> 
+  pivot_longer(
+    cols = av_price_breed:av_price,
+    names_to = "price_type",
+    values_to = "price"
+  ) |> 
+  pivot_wider(
+    names_from = year,
+    values_from = price,
+    id_cols = c(code_amc, price_type)
+  ) |> 
+  drop_na()
+```
+
+
+```{r}
+ggplot(x, aes(x = `2006`, y = `2017`, color = price_type)) +
+  geom_point() +          # scatter plot points
+  geom_smooth(method = "lm", se = FALSE, formula = 'y ~ x') +  # add regression lines
+  labs(x = "Price in 2006", y = "Price in 2017", 
+       title = "Scatter plot of Prices in 2006 vs 2017",
+       color = "Price Type") +  # axis labels and title
+  theme_minimal()              # cleaner plot theme
+```
+
+```{r}
+ggplot(x, aes(x = `2006`, y = `2017`, color = price_type)) +
+  geom_point() +          # scatter plot points
+  geom_smooth(method = "lm", se = FALSE, formula = 'y ~ x') +  # add regression lines
+  labs(x = "Price in 2006", y = "Price in 2017", 
+       title = "Scatter plot of Prices in 2006 vs 2017",
+       color = "Price Type") +  # axis labels and title
+  theme_minimal() +              # cleaner plot theme
+  facet_wrap(~ price_type)        # create a panel for each price_type
+
+```
+
+```{r}
+ggplot(x, aes(x = `2006`, y = `2017`, color = price_type)) +
+  geom_point() +          # scatter plot points
+  geom_smooth(method = "lm", se = FALSE, formula = 'y ~ x') +  # add regression lines
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black") +  # 45-degree line
+  labs(x = "Price in 2006", y = "Price in 2017", 
+       title = "Scatter plot of Prices in 2006 vs 2017",
+       color = "Price Type") +  # axis labels and title
+  theme_minimal() +              # cleaner plot theme
+  facet_wrap(~ price_type) +      # create a panel for each price_type
+  coord_equal()                   # enforce equal scaling on x and y axes
+
+```
+
+```{r}
+ggplot(x, aes(x = `2006`, y = `2017`, color = price_type)) +
+  geom_point(alpha = 0.6) +  # scatter plot points with transparency
+  geom_smooth(method = "lm", se = FALSE, formula = 'y ~ x') +  # add regression lines
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black") +  # 45-degree line
+  labs(x = "Price in 2006", y = "Price in 2017", 
+       title = "Scatter plot of Prices in 2006 vs 2017",
+       color = "Price Type") +  # axis labels and title
+  theme_minimal() +              # cleaner plot theme
+  facet_wrap(~ price_type, scales = "free") +  # create a panel for each price_type with independent scales
+  theme(legend.position = "none")  # hide the legend (since color is shown in facets)
+
+```
+
+```{r}
+ggplot(x, aes(x = `2006`, y = `2017`, color = price_type)) +
+  geom_point(alpha = 0.6) +  # scatter plot points with transparency
+  geom_smooth(method = "lm", se = FALSE, formula = 'y ~ x') +  # add regression lines
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black") +  # 45-degree line
+  labs(x = "Price in 2006", y = "Price in 2017", 
+       title = "Scatter plot of Prices in 2006 vs 2017",
+       color = "Price Type") +  # axis labels and title
+  theme_minimal() +              # cleaner plot theme
+  facet_wrap(~ price_type, scales = "free") +  # allow independent scales
+  scale_x_continuous(limits = NULL) +          # ensure x and y axes use the same scale per facet
+  scale_y_continuous(limits = NULL) +
+  coord_cartesian(clip = "off")                # make sure axes are consistent across facets
+```
+
+```{r}
+ggplot(x, aes(x = `2006`, y = `2017`, color = price_type)) +
+  geom_point(alpha = 0.6) +  # scatter plot points with transparency
+  geom_smooth(method = "lm", se = FALSE, formula = 'y ~ x') +  # add regression lines
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black") +  # 45-degree line
+  labs(x = "Price in 2006", y = "Price in 2017", 
+       title = "Scatter plot of Prices in 2006 vs 2017",
+       color = "Price Type") +  # axis labels and title
+  theme_minimal() +              # cleaner plot theme
+  facet_wrap(~ price_type, scales = "free") +  # create a panel for each price_type with independent scales
+  scale_x_continuous(limits = c(0, NA)) +      # set x-axis to start at 0
+  scale_y_continuous(limits = c(0, NA))        # set y-axis to start at 0
+
+```
+There is a valid argument to only use prices for slaughter. They seem more "well behaved".
