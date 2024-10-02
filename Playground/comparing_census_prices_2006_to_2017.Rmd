@@ -9,11 +9,25 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Long - wide version
+```{r, include=FALSE}
+# Data Wrangling
+library(dplyr)
+library(tidyr)
+library(readr)
+
+# Graphics
+library(ggplot2)
+
+# Personal functions
+source("../Functions/functions.R")
+```
+
+# Long - wide version
 
 This is a version to try a plot.
 
 ```{r}
+# amazonia
 x <- agg_census_data |> 
   filter(
     code_biome == 1
@@ -36,6 +50,7 @@ x <- agg_census_data |>
   drop_na()
 ```
 
+# Plots 
 
 ```{r}
 ggplot(x, aes(x = `2006`, y = `2017`, color = price_type)) +
@@ -87,6 +102,7 @@ ggplot(x, aes(x = `2006`, y = `2017`, color = price_type)) +
 
 ```
 
+
 ```{r}
 ggplot(x, aes(x = `2006`, y = `2017`, color = price_type)) +
   geom_point(alpha = 0.6) +  # scatter plot points with transparency
@@ -101,6 +117,7 @@ ggplot(x, aes(x = `2006`, y = `2017`, color = price_type)) +
   scale_y_continuous(limits = NULL) +
   coord_cartesian(clip = "off")                # make sure axes are consistent across facets
 ```
+# Final plots
 
 ```{r}
 ggplot(x, aes(x = `2006`, y = `2017`, color = price_type)) +
@@ -108,12 +125,89 @@ ggplot(x, aes(x = `2006`, y = `2017`, color = price_type)) +
   geom_smooth(method = "lm", se = FALSE, formula = 'y ~ x') +  # add regression lines
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black") +  # 45-degree line
   labs(x = "Price in 2006", y = "Price in 2017", 
-       title = "Scatter plot of Prices in 2006 vs 2017",
+       title = "Scatter plot of Prices in 2006 vs 2017 - Amazonia",
        color = "Price Type") +  # axis labels and title
   theme_minimal() +              # cleaner plot theme
   facet_wrap(~ price_type, scales = "free") +  # create a panel for each price_type with independent scales
   scale_x_continuous(limits = c(0, NA)) +      # set x-axis to start at 0
-  scale_y_continuous(limits = c(0, NA))        # set y-axis to start at 0
+  scale_y_continuous(limits = c(0, NA)) +       # set y-axis to start at 0
+  theme(legend.position = "none")              # remove legends
+```
+There is a valid argument to only use prices for slaughter. They seem more "well behaved". Sales of breeding stock are very noisy.
+
+
+Testing for cerrado.
+
+```{r}
+#cerrado
+agg_census_data |> 
+  filter(
+    code_biome == 3
+  ) |>
+  select(
+    year,
+    code_amc,
+    av_price_breed:av_price
+  ) |> 
+  pivot_longer(
+    cols = av_price_breed:av_price,
+    names_to = "price_type",
+    values_to = "price"
+  ) |> 
+  pivot_wider(
+    names_from = year,
+    values_from = price,
+    id_cols = c(code_amc, price_type)
+  ) |> 
+  drop_na() %>%
+  ggplot(., aes(x = `2006`, y = `2017`, color = price_type)) +
+  geom_point(alpha = 0.6) +  # scatter plot points with transparency
+  geom_smooth(method = "lm", se = FALSE, formula = 'y ~ x') +  # add regression lines
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black") +  # 45-degree line
+  labs(x = "Price in 2006", y = "Price in 2017", 
+       title = "Scatter plot of Prices in 2006 vs 2017 - Cerrado",
+       color = "Price Type") +  # axis labels and title
+  theme_minimal() +              # cleaner plot theme
+  facet_wrap(~ price_type, scales = "free") +  # create a panel for each price_type with independent scales
+  scale_x_continuous(limits = c(0, NA)) +      # set x-axis to start at 0
+  scale_y_continuous(limits = c(0, NA)) +     # set y-axis to start at 0
+ theme(legend.position = "none")              # remove legends
+```
+Similar results. 
+
+And, finally, unfiltered (caatinga and mata atlantica seem noisy...)
+
+```{r}
+agg_census_data |>
+  select(
+    year,
+    code_amc,
+    av_price_breed:av_price
+  ) |> 
+  pivot_longer(
+    cols = av_price_breed:av_price,
+    names_to = "price_type",
+    values_to = "price"
+  ) |> 
+  pivot_wider(
+    names_from = year,
+    values_from = price,
+    id_cols = c(code_amc, price_type)
+  ) |> 
+  drop_na() %>%
+  ggplot(., aes(x = `2006`, y = `2017`, color = price_type)) +
+  geom_point(alpha = 0.5) +  # scatter plot points with transparency
+  geom_smooth(method = "lm", se = FALSE, formula = 'y ~ x') +  # add regression lines
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black") +  # 45-degree line
+  labs(x = "Price in 2006", y = "Price in 2017", 
+       title = "Scatter plot of Prices in 2006 vs 2017 - All",
+       color = "Price Type") +  # axis labels and title
+  theme_minimal() +              # cleaner plot theme
+  facet_wrap(~ price_type, scales = "free") +  # create a panel for each price_type with independent scales
+  scale_x_continuous(limits = c(0, NA)) +      # set x-axis to start at 0
+  scale_y_continuous(limits = c(0, NA)) +    # set y-axis to start at 0
+   theme(legend.position = "none")              # remove legends
 
 ```
-There is a valid argument to only use prices for slaughter. They seem more "well behaved".
+
+Same conclusion.
