@@ -155,7 +155,7 @@ cattle_heads_ppm <- cattle_heads_ppm |>
 
 # Census 2017
 
-## Loading data
+## Defining categories
 
 I loop the loading on each of the 12 Variables of interest. First I define their codes, then their variable names. Cleaning is preformed during right after the download, so the resulting data frame already tidied-up.
 
@@ -202,6 +202,8 @@ census_names = c(
   "sales_value_big_slaughter"
 )
 ```
+
+## Loading data
 
 ```{r}
 for (i in 1:12) {
@@ -337,7 +339,7 @@ shares_by_amc <- left_join(
 ```
 
 ```{r}
-bulk_write_rds(shares_by_amc)
+bulk_write_rds(cattle_heads_census_1995, shares_by_amc)
 ```
 
 # Census 2006
@@ -594,9 +596,8 @@ Then, I want to get from each census, the cattle head counts (total and only for
 
 ## Data for 2017
 
-
 ```{r}
-a <- cattle_census_2017  |> 
+agg_2017 <- cattle_census_2017  |> 
   # only identify municipality by code
   select(
     ! c(
@@ -626,6 +627,10 @@ a <- cattle_census_2017  |>
     
     .by = c(code_amc, code_biome, main_biome)
   ) |> 
+  # replace NAs with 0 to allow operations
+  mutate(
+    mutate(across(everything(), ~ replace_na(., 0)))
+  ) |> 
   # calculate average prices
   mutate(
     # sales for breeding
@@ -642,6 +647,107 @@ a <- cattle_census_2017  |>
                   + heads_sold_big_finish
                   + heads_sold_big_slaughter
                 )
-    ) 
+    ) |> 
+  select(
+    code_amc,
+    code_biome,
+    main_biome,
+    cattle_heads,
+    cattle_heads_big,
+    av_price_breed, av_price_finish, av_price_slaughter, av_price
+  )
 ```
+
+## Data for 2006
+
+```{r}
+agg_2006 <- cattle_census_2006  |> 
+  # only identify municipality by code
+  select(
+    !name_muni
+  ) |> 
+  # join amc
+  left_join(
+    muni_to_amc |> 
+      as_tibble() |> 
+      select(code_amc, code_muni, code_biome, main_biome),
+    
+    by = "code_muni"
+  ) |>
+  # remove muni identifier and keep only amc
+  select( 
+    ! code_muni
+  ) |> 
+  # dissolve all variables by amc
+  summarise(
+    across(
+      everything(),
+      \(x) sum(x, na.rm = TRUE)
+      ),
+    
+    .by = c(code_amc, code_biome, main_biome)
+  ) |> 
+  # replace NAs with 0 to allow operations
+  mutate(
+    mutate(across(everything(), ~ replace_na(., 0)))
+  ) |> 
+  # calculate average prices
+  mutate(
+    # sales for breeding
+    av_price_breed = sales_value_big_breed/heads_sold_big_breed,
+    # sales for finishing
+    av_price_finish = sales_value_big_finish/heads_sold_big_finish,
+    # sales for slaughter
+    av_price_slaughter = (sales_value_big_slaughter_young
+                          + sales_value_big_slaughter_male
+                          + sales_value_big_slaughter_female)/(
+                            heads_sold_big_slaughter_young
+                            + heads_sold_big_slaughter_male
+                            + heads_sold_big_slaughter_female),
+    # total sales
+    av_price = (sales_value_big_breed 
+                + sales_value_big_finish
+                + sales_value_big_slaughter_young
+                + sales_value_big_slaughter_male
+                + sales_value_big_slaughter_female)/(
+                  heads_sold_big_breed
+                  + heads_sold_big_finish
+                  + heads_sold_big_slaughter_young
+                  + heads_sold_big_slaughter_male
+                  + heads_sold_big_slaughter_female),
+    ) |> 
+  select(
+    code_amc,
+    code_biome,
+    main_biome,
+    cattle_heads,
+    cattle_heads_big,
+    av_price_breed, av_price_finish, av_price_slaughter, av_price
+  )
+```
+
+
+## Joining the data
+
+```{r}
+agg_census_data <- bind_rows(
+  list(
+    "2006" = agg_2006,
+    "2017" = agg_2017
+  ),
+  
+  .id = "year"
+)
+```
+
+# Save as RDS
+
+```{r, eval=FALSE}
+bulk_write_rds(
+  cattle_census_2006,
+  cattle_census_2017,
+  agg_census_data
+  )
+```
+
 
