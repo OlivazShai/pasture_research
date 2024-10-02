@@ -278,58 +278,6 @@ Removing auxiliary variables.
 remove(census_names, census_variables)
 ```
 
-## Average Prices in 2017
-
-I'll aggregate by AMC, so first I need to source my municipality to AMC "translator".
-
-```{r}
-bulk_read_rds(muni_to_amc)
-```
-
-Now, I'll use census sales data to extract average cattle price per municipality. I only use sales **for slaughter** and **from larger farms**.
-
-CORRECT THIS TO KEEP THE HEAD COUNTS!
-
-```{r}
-cattle_prices_census_2017 <- cattle_census_2017  |> 
-  select(
-   code_muni,
-   name_muni,
-   code_state,
-   name_state,
-   sales_value_big_slaughter,
-   heads_sold_big_slaughter
-  ) |> 
-  # join amc
-  left_join(
-    muni_to_amc |> 
-      as_tibble() |> 
-      select(code_amc, code_muni, code_biome, main_biome),
-    
-    by = "code_muni"
-  ) |> 
-  select( 
-    code_amc, code_biome, main_biome,
-    sales_value_big_slaughter,
-    heads_sold_big_slaughter
-  ) |> 
-  summarise(
-    sales_value_big_slaughter = sum(sales_value_big_slaughter, na.rm = TRUE),
-    heads_sold_big_slaughter = sum(heads_sold_big_slaughter, na.rm = TRUE),
-
-    .by = c(code_amc, code_biome, main_biome)
-  ) |>
-  # average price by amc
-  mutate(
-    average_price =
-      (sales_value_big_slaughter)/
-      (heads_sold_big_slaughter)
-  ) |>
-  drop_na(
-    average_price
-  )
-```
-
 # Census 1995
 
 ## Loading data
@@ -633,8 +581,67 @@ And removing auxiliary variables.
 rm(x,v,c,cat,names)
 ```
 
-# Saving RDS
+# Agregation of Census Data
+
+Here I will aggregate data from both the census under study (2006 and 2017). To ensure intertemporal comparability, I'll aggregate by AMC. First, I source my municipality-to-AMC "translator".
 
 ```{r}
-bulk_write_rds(cattle_census_2006)
+bulk_read_rds(muni_to_amc)
 ```
+
+Then, I want to get from each census, the cattle head counts (total and only for larger farms) and average prices os cattle sales (total and discriminated by finality). 
+
+
+## Data for 2017
+
+
+```{r}
+a <- cattle_census_2017  |> 
+  # only identify municipality by code
+  select(
+    ! c(
+      name_muni,
+      code_state,
+      name_state
+      )
+  ) |> 
+  # join amc
+  left_join(
+    muni_to_amc |> 
+      as_tibble() |> 
+      select(code_amc, code_muni, code_biome, main_biome),
+    
+    by = "code_muni"
+  ) |>
+  # remove muni identifier and keep only amc
+  select( 
+    ! code_muni
+  ) |> 
+  # dissolve all variables by amc
+  summarise(
+    across(
+      everything(),
+      \(x) sum(x, na.rm = TRUE)
+      ),
+    
+    .by = c(code_amc, code_biome, main_biome)
+  ) |> 
+  # calculate average prices
+  mutate(
+    # sales for breeding
+    av_price_breed = sales_value_big_breed/heads_sold_big_breed,
+    # sales for finishing
+    av_price_finish = sales_value_big_finish/heads_sold_big_finish,
+    # sales for slaughter
+    av_price_slaughter = sales_value_big_slaughter/heads_sold_big_slaughter,
+    # total sales
+    av_price = (sales_value_big_breed 
+                + sales_value_big_finish
+                + sales_value_big_slaughter)/(
+                  heads_sold_big_breed
+                  + heads_sold_big_finish
+                  + heads_sold_big_slaughter
+                )
+    ) 
+```
+
