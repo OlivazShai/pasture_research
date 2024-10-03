@@ -391,7 +391,7 @@ main_biome_muni |>
   )
 ```
 
-## AMC \~ Biome intersections
+## AMC - Biome intersections
 
 Now, I'll replicate with the amcs what was done with municipalities. First, I calculate the AMCs areas.
 
@@ -479,5 +479,3 @@ bulk_write_rds(
   main_biome_amc
   )
 ```
-
-X
