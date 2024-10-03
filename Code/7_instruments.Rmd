@@ -23,12 +23,12 @@ library(ggplot2)
 library(sf)
 library(sidrar)
 library(geobr)
-library(datazoom.amazonia)
+
+# Miscelaneous
+library(units)
 
 # Personal functions
 source("../Functions/functions.R")
-
-library(plm)
 ```
 
 # Importing separate data
@@ -36,7 +36,8 @@ library(plm)
 ```{r}
 bulk_read_rds(
   china_shock,
-  shares_by_amc
+  shares_by_amc,
+  amc_1991_2022
 )
 ```
 
@@ -49,6 +50,7 @@ ssiv <- cross_join(
   shares_by_amc,
   china_shock
   ) |>
+  # get AMC area
   left_join(
     amc_1991_2022 |> 
       as_tibble() |> 
@@ -63,24 +65,24 @@ ssiv <- cross_join(
   ) 
 ```
 
+## RDS
+
 ```{r}
 bulk_write_rds(ssiv)
 ```
 
-# Painel
+# Painel - sketches
+
+```{r}
+bulk_read_rds(cattle_prices_2017_census)
+```
 
 These are just sketches, not precise!
 
 ```{r}
 y <- left_join(
   cattle_heads_ppm,
-  cattle_prices_2017_census |> 
-    select(
-      !c(
-        heads_sold_big_slaughter,
-        sales_value_big_slaughter
-      )
-    ),
+  cattle_prices_2017_census,
   
   by = join_by("code_amc", "code_biome", "main_biome")
   ) |> 
