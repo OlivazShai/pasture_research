@@ -77,7 +77,9 @@ cattle_prices_cepea_in_census_years <- prices_cattle |>
     date = as_date(date, format = "%d/%m/%Y"),
     census_year = case_when(
       date >= "2016-10-01" & date <= "2017-09-30" ~ 2017,
+      date >= "2017-10-01" & date <= "2018-09-30" ~ 2018,
       date >= "2006-01-01" & date <= "2006-12-31" ~ 2006,
+      date >= "2007-01-01" & date <= "2007-12-31" ~ 2007,
       .default = NA )
   ) |>
   summarise(
