@@ -83,9 +83,9 @@ joined_data <- left_join(
 
 ```{r}
 feols(
-  data = joined_data,
-  cattle_heads_big ~ 1 | local_price + local_price_2 ~ ssiv + ssiv_2,
-  cluster = code_amc
+  data = joined_data |> 
+    mutate(code_amc = as.factor(code_amc)),
+  cattle_heads_big/area_amc ~ 1 | local_price + local_price_2 ~ ssiv + ssiv_2
   ) |> 
   etable()
 ```
