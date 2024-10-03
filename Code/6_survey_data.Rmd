@@ -737,7 +737,11 @@ agg_census_data <- bind_rows(
   ),
   
   .id = "year"
-)
+  ) |> 
+  # to allow joins ahead
+  mutate(
+    year = as.numeric(year)
+  )
 ```
 
 # Save as RDS
