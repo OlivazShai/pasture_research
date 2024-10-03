@@ -79,9 +79,34 @@ joined_data <- left_join(
 
 # Regression
 
+## Todo mundo
+
 ```{r}
 feols(
   data = joined_data,
+  cattle_heads_big ~ 1 | local_price + local_price_2 ~ ssiv + ssiv_2,
+  cluster = code_amc
+  ) |> 
+  etable()
+```
+
+## amazonia
+
+```{r}
+feols(
+  data = joined_data |> filter(code_biome == 1),
   cattle_heads_big ~ 1 | local_price + local_price_2 ~ ssiv + ssiv_2
-  ) 
+  
+  ) |> 
+  etable()
+```
+
+## cerrado
+
+```{r}
+feols(
+  data = joined_data |> filter(code_biome == 1),
+  cattle_heads_big ~ 1 | local_price + local_price_2 ~ ssiv + ssiv_2
+  ) |> 
+  etable()
 ```
