@@ -16,6 +16,7 @@ library(readr)
 library(tidyr)
 library(stringr)
 library(readxl)
+library(forcats)
 
 # Graphics
 library(ggplot2)
@@ -69,11 +70,13 @@ joined_data <- left_join(
     agg_census_data,
     
     by = c("code_amc", "year")
-  ) |> 
-  # projecting local prices ahead 
+  ) |>  
   mutate(
+    # projecting local prices ahead
     local_price = av_price_slaughter,
-    local_price_2 = (av_price_slaughter/mean_price)*mean_price_2
+    local_price_2 = (av_price_slaughter/mean_price)*mean_price_2,
+    # fixed efects
+    fe_amc = as_factor(code_amc)
   )
 ```
 
@@ -83,9 +86,8 @@ joined_data <- left_join(
 
 ```{r}
 feols(
-  data = joined_data |> 
-    mutate(code_amc = as.factor(code_amc)),
-  cattle_heads_big/area_amc ~ 1 | local_price + local_price_2 ~ ssiv + ssiv_2
+  data = joined_data,
+  cattle_heads_big ~ 1 | local_price + local_price_2 ~ ssiv + ssiv_2
   ) |> 
   etable()
 ```
@@ -96,7 +98,6 @@ feols(
 feols(
   data = joined_data |> filter(code_biome == 1),
   cattle_heads_big ~ 1 | local_price + local_price_2 ~ ssiv + ssiv_2
-  
   ) |> 
   etable()
 ```
@@ -105,8 +106,41 @@ feols(
 
 ```{r}
 feols(
-  data = joined_data |> filter(code_biome == 1),
+  data = joined_data |> filter(code_biome == 3),
   cattle_heads_big ~ 1 | local_price + local_price_2 ~ ssiv + ssiv_2
   ) |> 
   etable()
+```
+
+# Diagnostics
+
+```{r}
+a <- joined_data |> 
+  mutate(
+    fe = as_factor(code_amc),
+    fe_2 = as_factor(main_biome)
+  ) |> 
+  drop_na() |> 
+  filter(
+    cattle_heads_big != 0
+  )
+```
+
+```{r}
+first_stage1 <- lm(local_price ~ ssiv, data = a)
+first_stage2 <- lm(local_price_2 ~ ssiv_2, data = a)
+
+# Extract predicted values
+a$local_price_hat <- predict(first_stage1)
+a$local_price_2_hat <- predict(first_stage2)
+```
+
+```{r}
+iv_model <- ivreg(
+  cattle_heads_big ~ local_price_hat + local_price_2_hat:fe_2 + fe_2, 
+  data = a
+)
+
+
+summary(iv_model)
 ```
