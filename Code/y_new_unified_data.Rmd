@@ -73,8 +73,8 @@ joined_data <- left_join(
   ) |>  
   mutate(
     # projecting local prices ahead
-    local_price = av_price_slaughter,
-    local_price_2 = (av_price_slaughter/mean_price)*mean_price_2,
+    local_price = av_price_slaughter*1000,
+    local_price_2 = (av_price_slaughter/mean_price)*mean_price_2*1000,
     # fixed efects
     fe_amc = as_factor(code_amc)
   )
@@ -87,9 +87,15 @@ joined_data <- left_join(
 ```{r}
 feols(
   data = joined_data,
-  cattle_heads_big ~ 1 | local_price + local_price_2 ~ ssiv + ssiv_2
+  sw(cattle_heads_big, cattle_heads_big/area_amc) ~ 1 | csw(1,main_biome,year) | local_price + local_price_2 ~ ssiv + ssiv_2,
+   panel.id = c("code_amc","year"),
+  cluster = "fe_amc"
   ) |> 
-  etable()
+  etable(
+    stage = 2,
+    tex = T,
+    fitstat = ~ n
+    )
 ```
 
 ## amazonia
@@ -143,4 +149,14 @@ iv_model <- ivreg(
 
 
 summary(iv_model)
+```
+
+## FE without IV
+
+```{r}
+feols(
+  data = a,
+  cattle_heads_big ~ local_price + local_price_2 | fe + year
+  ) |> 
+  etable()
 ```
