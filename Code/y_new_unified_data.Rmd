@@ -85,16 +85,25 @@ joined_data <- left_join(
 ## Todo mundo
 
 ```{r}
-feols(
+m1 <- feols(
   data = joined_data,
   sw(cattle_heads_big, cattle_heads_big/area_amc) ~ 1 | csw(1,main_biome,year) | local_price + local_price_2 ~ ssiv + ssiv_2,
    panel.id = c("code_amc","year"),
   cluster = "fe_amc"
-  ) |> 
-  etable(
+  )
+
+m2 <- feols(
+  data = joined_data,
+  cattle_heads_big ~ 1 | csw(1,main_biome,year) | local_price + local_price_2 ~ ssiv + ssiv_2,
+   panel.id = c("code_amc","year"),
+  cluster = "fe_amc"
+  )
+
+etable(
+    m2,
     stage = 2,
     tex = T,
-    fitstat = ~ n
+    fitstat = ~ n + f + ivfall
     )
 ```
 
