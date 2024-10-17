@@ -16,6 +16,7 @@ library(readr)
 library(tidyr)
 library(stringr)
 library(readxl)
+library(purrr)
 
 # Graphics
 library(ggplot2)
@@ -27,23 +28,31 @@ library(terra)
 
 # Importing
 
+## Serialised data
+
+```{r}
+bulk_read_rds(
+  amc_1991_2022,
+  conservation_units,
+  indigenous_lands
+  )
+```
+
 ## Transportation Costs
 
 ```{r}
-transport_cost <- rast(
+tc <- rast(
   x = "../Inputs/cost_raster_raster_proj.tif"
   )
 ```
 
-## Municipality Seats
+## AMC terra vector
 
 ```{r}
-municipalities_tc <- read_rds(
-  file = "../Variables/municipalities.rds"
-  ) |>
+amc_tr <- amc_1991_2022 |> 
   # match crs with raster
   st_transform(
-    crs(transport_cost)
+    crs(tc)
   ) |>
   # save with terra
   vect()
@@ -54,16 +63,14 @@ municipalities_tc <- read_rds(
 There are two groups of Conservation Units. Integral Protection (PI) areas have the objective of preserving nature, with only the indirect use of its natural resources being permitted. Sustainable Use (US) areas have the aim of reconciling nature conservation with sustainable use of natural resources.
 
 ```{r}
-conservation_units_tc <- read_rds(
-  file = "../Variables/conservation_units.rds"
-  ) |>
+conservation_units_tr <- conservation_units |>
   # filter only Integral Protection
   filter(
     group == "PI"
   ) |> 
   # match crs with raster
   st_transform(
-    crs(transport_cost)
+    crs(tc)
   ) |>
   # save with terra
   vect()
@@ -72,18 +79,16 @@ conservation_units_tc <- read_rds(
 ## Indigenous Lands
 
 ```{r}
-indigenous_lands_tc <- read_rds(
-  file = "../Variables/indigenous_lands.rds"
-  ) |>
+indigenous_lands_tr <- indigenous_lands |>
   # match crs with raster
   st_transform(
-    crs(transport_cost)
+    crs(tc)
   ) |>
   # save with terra
   vect()
 ```
 
-# Transportation costs per municipality
+# Transportation costs per AMC
 
 I use a raster of quality adjusted transportation cost to major ports, developed by Rafael Araujo.
 
@@ -92,26 +97,27 @@ I use a raster of quality adjusted transportation cost to major ports, developed
 Here I'll remove conservation units and indigenous lands from the cost raster.
 
 ```{r}
-transport_cost_unprotected <- transport_cost |> 
+tc_unprotected <- tc |> 
   # cut conservation units
   mask(
-    conservation_units_tc, 
+    conservation_units_tr,
     inverse = TRUE
   ) |> 
   # cut indigenous lands
   mask(
-    indigenous_lands_tc, 
+    indigenous_lands_tr, 
     inverse = TRUE
   )
 ```
 
 ## Masking raster
 
-```{r}
-transport_cost_muni <- extract(
+```{r, eval=FALSE}
+tc_by_amc <- terra::extract(
   # extract from raster
-  transport_cost_unprotected, 
-  municipalities_tc, 
+  tc_unprotected,
+  # at locations defined by the vector
+  amc_tr, 
   fun = mean, 
   na.rm = TRUE,
   touches = TRUE,
@@ -123,13 +129,54 @@ transport_cost_muni <- extract(
   ) |> 
   # reverse CRS to standard
   st_transform(
-    st_crs(municipalities)
-  ) |> 
-  # filter to amazon
-  filter(
-    code_state %in% amazon_states
-  )
+    st_crs(amc_1991_2022)
+  ) 
 ```
+
+## Versão com varias coisas
+
+```{r}
+# Define the custom function for the summary statistics
+my_summary <- function(x, na.rm) {
+  # Calculate mean, median, mean of the 1st quartile, and mean of the 4th quartile
+  q1 <- quantile(x, 0.25, na.rm = na.rm)
+  q4 <- quantile(x, 0.75, na.rm = na.rm)
+  
+  c(
+    mean = mean(x, na.rm = na.rm),
+    median = median(x, na.rm = na.rm),
+    q1_mean = mean(x[x <= q1], na.rm = na.rm),
+    q4_mean = mean(x[x >= q4], na.rm = na.rm)
+  )
+}
+
+# Use the custom function with terra::extract
+tc_by_amc <- terra::extract(
+  tc_unprotected,
+  amc_tr, 
+  fun = my_summary, 
+  na.rm = TRUE,
+  touches = TRUE,
+  bind = TRUE
+) |> 
+  # Return to sf format
+  st_as_sf() 
+
+
+  rename(
+    mean_transport_cost = mean,
+    median_transport_cost = median,
+    q1_mean_transport_cost = q1_mean,
+    q4_mean_transport_cost = q4_mean
+  ) |> 
+  # Reverse CRS to standard
+  st_transform(
+    st_crs(amc_1991_2022)
+  )
+
+```
+
+STOP
 
 ## Map
 
@@ -154,10 +201,7 @@ ggplot() +
 ## Generate RDS
 
 ```{r}
-write_rds(
-  transport_cost_muni,
-  file = "../Variables/transport_cost_muni.rds"
-)
+bulk_write_rds()
 ```
 
 # Distance to slaughterhouses
