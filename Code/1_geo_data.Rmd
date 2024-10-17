@@ -164,11 +164,11 @@ I'll start a new series of AMC codes starting in 990XX. These new codes will sub
 muni_not_in_amc <- muni_not_in_amc |> 
   mutate(
     code_amc = case_when(
-      name_muni == "Mojuí Dos Campos" ~ "99001",
+      name_muni == "Mojuí dos Campos" ~ "99001",
       name_muni == "Pescaria Brava" ~ "99002",
       name_muni == "Balneário Rincão" ~ "99003",
       name_muni == "Pinto Bandeira" ~ "99004",
-      name_muni == "Paraíso Das Águas" ~ "99005"
+      name_muni == "Paraíso das Águas" ~ "99005"
     )
   )
 ```
@@ -311,7 +311,7 @@ biome_dummy_in_muni <- bind_cols(
 
 Then, I intersect the municipalities and biome geometries, then calculate the area of the intersection.
 
-```{r}
+```{r, eval=FALSE}
 intersections <- st_intersection(
   municipalities, 
   biomes
@@ -349,7 +349,7 @@ biome_area_in_muni <- intersections |>
 
 Now, I find the main (predominant) biome in each municipality, defined as the biome with the largest share of the municipality's area. This replicates the official "Biomas predominantes para fins estatísticos" from IBGE, avaliable [here](https://biblioteca.ibge.gov.br/visualizacao/livros/liv102097.pdf).
 
-```{r}
+```{r, eval=FALSE}
 main_biome_muni <- intersections |>
   as_tibble(
   ) |> 
@@ -381,7 +381,7 @@ main_biome_muni <- intersections |>
 
 If we check, we see that we ended up with the same totals as the official list from IBGE.
 
-```{r}
+```{r, eval=FALSE}
 main_biome_muni |> 
   group_by(
     main_biome
@@ -467,6 +467,7 @@ muni_to_amc <- left_join(
 
 ```{r}
 bulk_write_rds(
+  # geographic
   municipalities, 
   conservation_units, 
   indigenous_lands,
@@ -475,7 +476,6 @@ bulk_write_rds(
   amc_1991_2022,
   # biomes
   biomes,
-  main_biome_muni,
   main_biome_amc
   )
 ```
