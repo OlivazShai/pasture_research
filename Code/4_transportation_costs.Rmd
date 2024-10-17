@@ -9,6 +9,10 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+\# Personal functions
+
+source("../Functions/functions.R")
+
 ```{r, include=FALSE}
 # Data Wrangling
 library(dplyr)
@@ -24,6 +28,10 @@ library(ggplot2)
 # Geographic
 library(sf)
 library(terra)
+
+# Personal functions
+source("../Functions/bulk_rds.R")
+source("../Functions/multi_sum_stats.R")
 ```
 
 # Importing
@@ -50,6 +58,10 @@ tc <- rast(
 
 ```{r}
 amc_tr <- amc_1991_2022 |> 
+  # remove amc area column
+  select(
+    - area_amc
+  ) |> 
   # match crs with raster
   st_transform(
     crs(tc)
@@ -133,46 +145,33 @@ tc_by_amc <- terra::extract(
   ) 
 ```
 
-## Versão com varias coisas
+## TC - Summary statistics by AMC
 
 ```{r}
-# Define the custom function for the summary statistics
-my_summary <- function(x, na.rm) {
-  # Calculate mean, median, mean of the 1st quartile, and mean of the 4th quartile
-  q1 <- quantile(x, 0.25, na.rm = na.rm)
-  q4 <- quantile(x, 0.75, na.rm = na.rm)
-  
-  c(
-    mean = mean(x, na.rm = na.rm),
-    median = median(x, na.rm = na.rm),
-    q1_mean = mean(x[x <= q1], na.rm = na.rm),
-    q4_mean = mean(x[x >= q4], na.rm = na.rm)
-  )
-}
-
-# Use the custom function with terra::extract
+# Perform the extract and manually assign column names
 tc_by_amc <- terra::extract(
   tc_unprotected,
   amc_tr, 
-  fun = my_summary, 
+  fun = multi_sum_stats, 
   na.rm = TRUE,
   touches = TRUE,
   bind = TRUE
-) |> 
-  # Return to sf format
-  st_as_sf() 
-
-
-  rename(
-    mean_transport_cost = mean,
-    median_transport_cost = median,
-    q1_mean_transport_cost = q1_mean,
-    q4_mean_transport_cost = q4_mean
   ) |> 
-  # Reverse CRS to standard
+  # Return to sf format and reverse CRS
+  st_as_sf() |> 
   st_transform(
     st_crs(amc_1991_2022)
+    )
+
+# Assign column names manually after extraction
+colnames(tc_by_amc) <- c(
+  "code_amc", "tc_mean", "tc_median", 
+  "tc_q1_mean", "tc_q2_mean", 
+  "tc_q3_mean", "tc_q4_mean", 
+  "tc_sd", "tc_iqr",
+  "geometry"
   )
+
 
 ```
 
