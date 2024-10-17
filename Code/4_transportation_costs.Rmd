@@ -9,10 +9,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-\# Personal functions
-
-source("../Functions/functions.R")
-
 ```{r, include=FALSE}
 # Data Wrangling
 library(dplyr)
@@ -122,35 +118,12 @@ tc_unprotected <- tc |>
   )
 ```
 
-## Masking raster
-
-```{r, eval=FALSE}
-tc_by_amc <- terra::extract(
-  # extract from raster
-  tc_unprotected,
-  # at locations defined by the vector
-  amc_tr, 
-  fun = mean, 
-  na.rm = TRUE,
-  touches = TRUE,
-  bind = TRUE) |> 
-  # return to sf format
-  st_as_sf() |> 
-  rename(
-    transport_cost = cost_raster_raster_proj
-  ) |> 
-  # reverse CRS to standard
-  st_transform(
-    st_crs(amc_1991_2022)
-  ) 
-```
-
 ## TC - Summary statistics by AMC
 
 ```{r}
 # Perform the extract and manually assign column names
 tc_by_amc <- terra::extract(
-  tc_unprotected,
+  tc,
   amc_tr, 
   fun = multi_sum_stats, 
   na.rm = TRUE,
@@ -171,21 +144,19 @@ colnames(tc_by_amc) <- c(
   "tc_sd", "tc_iqr",
   "geometry"
   )
-
-
 ```
 
-STOP
+**Check NAs**
 
 ## Map
 
 ```{r}
 ggplot() +
   geom_sf(
-    data = transport_cost_muni,
+    data = tc_by_amc |>  mutate(na = is.na(tc_mean)),
     aes(
       geometry = geometry,
-      fill = transport_cost
+      fill = na
       ),
     color= NA
     ) +
