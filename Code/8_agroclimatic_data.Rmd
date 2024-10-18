@@ -123,6 +123,36 @@ si_by_amc <- si_by_amc |>
   select(-geometry)
 ```
 
+## Check NAs
+
+## Map
+
+```{r}
+bulk_read_rds(amc_1991_2022)
+```
+
+```{r}
+si_by_amc |> 
+  left_join(
+    amc_1991_2022 |>  select(code_amc, geom),
+    by = "code_amc"
+  ) |> 
+  ggplot() +
+    geom_sf(
+      aes(
+        geometry = geom,
+        fill = si_median
+        ),
+      color= NA
+      ) +
+    theme_minimal() +
+    theme(
+      axis.title=element_blank(),
+      axis.text=element_blank(),
+      axis.ticks=element_blank()
+      )
+```
+
 # Save as RDS
 
 ```{r}
