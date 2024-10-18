@@ -28,7 +28,7 @@ library(geobr)
 library(units)
 
 # Personal functions
-source("../Functions/functions.R")
+source("../Functions/bulk_rds.R")
 ```
 
 # Importing separate data
@@ -69,89 +69,4 @@ ssiv <- cross_join(
 
 ```{r}
 bulk_write_rds(ssiv)
-```
-
-# Painel - sketches
-
-```{r}
-bulk_read_rds(cattle_prices_2017_census)
-```
-
-These are just sketches, not precise!
-
-```{r}
-y <- left_join(
-  cattle_heads_ppm,
-  cattle_prices_2017_census,
-  
-  by = join_by("code_amc", "code_biome", "main_biome")
-  ) |> 
-  mutate(
-    year = as.integer(year)
-  ) |> 
-  left_join(
-    ssiv |>  
-      select(1:3, year, ssiv),
-  by = join_by("year", "code_amc", "code_biome", "main_biome")
-  ) |> 
-  # national prices
-  left_join(
-    national_prices,
-    by = "year"
-  ) |>  
-  mutate(
-    local_price = cattle_price * average_price * 1000/cattle_price_2017_cepea
-  ) |> 
-  select(
-    ! c(soy_price, maize_price)
-  ) |> 
-  mutate(
-    lag_local_price = dplyr::lag(local_price),
-    lag_ssiv = dplyr::lag(ssiv),
-    .by = code_amc
-  ) |> 
-  filter(
-     year == 2017
-  )
-```
-
-# Regression
-
-```{r}
-amazonia <- y |> 
-  filter(
-    code_biome == 1
-  ) 
-
-cerrado <- y |> 
-  filter(
-    code_biome == 3
-  )
-```
-
-```{r}
-m1 <- lm(
-  cattle_heads ~ local_price + lag_local_price | lag_local_price +  ssiv,
-  data = cerrado,
-  index = c("code_amc", "year"),
-  model = "within",
-  effect = "individual"
-)
-
-
-m2 <- feols(
-  cattle_heads ~ 1 | local_price + lag_local_price ~ ssiv,
-  data = cerrado
-)
-
-summary(m1)
-
-etable(m2)
-```
-
-```{r}
-delta = 1/as.vector(m1$coefficients)[2]*1/0.9
-phi1 = - delta * as.vector(m1$coefficients)[1]
-
-print(phi1)
 ```
