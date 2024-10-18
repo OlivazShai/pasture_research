@@ -36,7 +36,9 @@ bulk_read_rds(
   national_prices,
   cattle_prices_cepea_in_census_years,
   agg_census_data,
-  ssiv
+  ssiv,
+  tc_by_amc,
+  ma
   )
 ```
 
