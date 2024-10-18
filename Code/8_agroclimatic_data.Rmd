@@ -27,7 +27,106 @@ library(terra)
 
 # Personal functions
 source("../Functions/bulk_rds.R")
+source("../Functions/multi_sum_stats.R")
 ```
 
 # FAO GAEZ - Pasture suitability
 
+## Reading data
+
+```{r}
+pasture_si <- rast("../Inputs/pasture_suitability_index")
+```
+
+Checking the map.
+
+```{r}
+plot(pasture_si)
+```
+
+## Check for NAs
+
+I think there can be some NAs saved as negative numbers.
+
+```{r}
+# Extract raster values
+pasture_values <- values(pasture_si, na.rm = TRUE)
+
+# Filter only negative values
+negative_pasture_values <- pasture_values[pasture_values < 0]
+
+negative_pasture_values |> table()
+
+rm(pasture_values, negative_pasture_values)
+```
+
+At the same time, there are no proper NAs.
+
+```{r}
+any(is.na(pasture_values))
+```
+
+So I need to assign -997 as NAs.
+
+```{r}
+# Replace -997 with NA in pasture_si
+pasture_si[pasture_si == -997] <- NA
+```
+
+## Data by AMC
+
+### Getting amc as Terra vector
+
+```{r}
+amc_tr <- amc_1991_2022 |> 
+  # remove amc area column
+  select(
+    - area_amc
+  ) |> 
+  # match crs with pasture si raster
+  st_transform(
+    crs(pasture_si)
+  ) |>
+  # save with terra
+  vect()
+```
+
+### SI - Summary statistics by AMC
+
+```{r}
+# Perform the extract and manually assign column names
+si_by_amc <- terra::extract(
+  pasture_si,  
+  amc_tr, 
+  fun = multi_sum_stats, 
+  na.rm = TRUE,
+  touches = TRUE,
+  bind = TRUE
+  ) |> 
+  # Return to sf format and reverse CRS
+  st_as_sf() |> 
+  st_transform(
+    st_crs(amc_1991_2022)
+    )
+
+# Assign column names manually after extraction
+colnames(si_by_amc) <- c(
+  "code_amc", "si_mean", "si_median", 
+  "si_q1_mean", "si_q2_mean", 
+  "si_q3_mean", "si_q4_mean", 
+  "si_sd", "si_iqr",
+  "geometry"
+  )
+
+si_by_amc <- si_by_amc |> 
+  as_tibble() |> 
+  select(-geometry)
+```
+
+# Save as RDS
+
+```{r}
+bulk_write_rds(
+  si_by_amc
+)
+```
