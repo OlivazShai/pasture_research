@@ -37,8 +37,7 @@ source("../Functions/multi_sum_stats.R")
 ```{r}
 bulk_read_rds(
   amc_1991_2022,
-  conservation_units,
-  indigenous_lands
+  muni_to_amc
   )
 ```
 
@@ -66,11 +65,22 @@ amc_tr <- amc_1991_2022 |>
   vect()
 ```
 
+# Protected areas
+
+This section removes the protected areas. I don't use this version in the main dataframe.
+
+```{r, eval=FALSE}
+bulk_read_rds(
+  conservation_units,
+  indigenous_lands,
+  )
+```
+
 ## Conservation Units
 
 There are two groups of Conservation Units. Integral Protection (PI) areas have the objective of preserving nature, with only the indirect use of its natural resources being permitted. Sustainable Use (US) areas have the aim of reconciling nature conservation with sustainable use of natural resources.
 
-```{r}
+```{r, eval=FALSE}
 conservation_units_tr <- conservation_units |>
   # filter only Integral Protection
   filter(
@@ -86,7 +96,7 @@ conservation_units_tr <- conservation_units |>
 
 ## Indigenous Lands
 
-```{r}
+```{r, eval=FALSE}
 indigenous_lands_tr <- indigenous_lands |>
   # match crs with raster
   st_transform(
@@ -96,15 +106,11 @@ indigenous_lands_tr <- indigenous_lands |>
   vect()
 ```
 
-# Transportation costs per AMC
-
-I use a raster of quality adjusted transportation cost to major ports, developed by Rafael Araujo.
-
 ## Removing protected areas
 
 Here I'll remove conservation units and indigenous lands from the cost raster.
 
-```{r}
+```{r, eval=FALSE}
 tc_unprotected <- tc |> 
   # cut conservation units
   mask(
@@ -117,6 +123,10 @@ tc_unprotected <- tc |>
     inverse = TRUE
   )
 ```
+
+# Transportation costs per AMC
+
+I use a raster of quality adjusted transportation cost to major ports, developed by Rafael Araujo.
 
 ## TC - Summary statistics by AMC
 
@@ -144,41 +154,69 @@ colnames(tc_by_amc) <- c(
   "tc_sd", "tc_iqr",
   "geometry"
   )
+
+tc_by_amc <- tc_by_amc |> 
+  as_tibble() |> 
+  select(-geometry)
 ```
 
-**Check NAs**
+And I remove the original dataframes.
+
+```{r}
+rm(
+  tc, amc_tr  
+)
+```
+
+## Check NAs
+
+```{r}
+tc_by_amc |>
+  filter(
+    is.na(tc_mean)
+  ) |> 
+  as_tibble() |> 
+  select(code_amc) |> 
+  left_join(
+    muni_to_amc,
+    
+    by = "code_amc"
+  ) |> 
+  as_tibble() |> 
+  select(- geom)
+```
 
 ## Map
 
 ```{r}
-ggplot() +
-  geom_sf(
-    data = tc_by_amc |>  mutate(na = is.na(tc_mean)),
-    aes(
-      geometry = geometry,
-      fill = na
-      ),
-    color= NA
-    ) +
-  theme_minimal() +
-  theme(
-    axis.title=element_blank(),
-    axis.text=element_blank(),
-    axis.ticks=element_blank()
-    )
-```
-
-## Generate RDS
-
-```{r}
-bulk_write_rds()
+tc_by_amc |> 
+  left_join(
+    amc_1991_2022 |>  select(code_amc, geom),
+    by = "code_amc"
+  ) |> 
+  ggplot() +
+    geom_sf(
+      aes(
+        geometry = geom,
+        fill = tc_median
+        ),
+      color= NA
+      ) +
+    theme_minimal() +
+    theme(
+      axis.title=element_blank(),
+      axis.text=element_blank(),
+      axis.ticks=element_blank()
+      )
 ```
 
 # Distance to slaughterhouses
 
+I'll deal with these data later!
+
 ## Reading
 
-```{r}
+```{r, eval=FALSE}
 sh <- st_read(
   "../Inputs/slaughterhouses/limites_frigorificos_2021.shp",
   quiet = T
@@ -188,7 +226,7 @@ sh <- st_read(
   )
 ```
 
-```{r}
+```{r, eval=FALSE}
 sh_active <- sh |> 
   filter(
     situacao == "Ativo"
@@ -197,7 +235,7 @@ sh_active <- sh |>
 
 ## Plot points
 
-```{r}
+```{r, eval=FALSE}
 ggplot() +
   geom_sf(
     data = municipalities,
@@ -221,7 +259,7 @@ ggplot() +
   )
 ```
 
-```{r}
+```{r, eval=FALSE}
 sh_distance <-  municipalities |>
   mutate(
     centroid = st_centroid(geom)
@@ -241,7 +279,7 @@ sh_distance <-  municipalities |>
   select(-nearest_point_index) 
 ```
 
-```{r}
+```{r, eval=FALSE}
 ggplot() +
   geom_sf(
     data = sh_distance |> 
@@ -262,6 +300,8 @@ ggplot() +
 
 # Market Access
 
+## Open data
+
 ```{r}
 market_access <- read_csv(
   file = "../Inputs/Market_access.csv",
@@ -269,23 +309,79 @@ market_access <- read_csv(
   )
 ```
 
-For now, we'll simply repeat data from 2000's to each municipality, using the AMCs.
+## Update AMCs
+
+I need to update this data to the "updated amcs". I'll also take advantage of the federation state information for each AMC in this dataframe. I'll also calculate
 
 ```{r}
-market_acess_by_muni <- left_join(
-  # AMCs in 1991 by municipalities
-  amc_1991_by_muni |> 
-    as_tibble() |> 
-    select(code_amc, muni),
-  # Market access by AMC
-  market_access |> 
-    select(amc, "2000"),
-  by = join_by("code_amc" == "amc")
+ma <- market_access |>
+  # remove "-" row
+  filter(
+    ! amc == "-"
   ) |> 
+  # Update AMC codes
   mutate(
-    market_access_2000 = `2000`/max(`2000`, na.rm = TRUE)*100
+    code_amc = case_when(
+      amc == "2020" ~ "99001",
+      amc == "14440" ~ "99002",
+      amc == "14413" ~ "99003",
+      amc == "15038" ~ "99004",
+      # Paraíso das Águas:
+      amc == "1085" ~ "99005",
+      amc == "1103" ~ "99005",
+      amc == "1107" ~ "99005",
+      .default = amc
+    )
   ) |> 
-  select(-c("2000"))
+  # For Paraiso das Aguas, I'll select the maximum for aggregation
+  summarise(
+    # group by new amc
+    .by = code_amc,
+    ma_1991 = max(`1991`),
+    ma_2000 = max(`2000`),
+    ma_2010 = max(`2010`),
+    code_state  = unique(Sigla)
+  ) |> 
+  # calculate normalized market access
+  mutate(
+    ma_1991_norm = ma_1991/max(ma_1991),
+    ma_2000_norm = ma_2000/max(ma_2000),
+    ma_2010_norm = ma_2010/max(ma_2010)
+  )
 ```
 
-GET BY NEW AMC
+And I remove the original dataframe.
+
+```{r}
+rm(market_access)
+```
+
+## Check non-coverage
+
+Compared to my larger AMC dataframe, I have no market access for Fernando de Noronha. This is not a problem, as that municipality is an isolated island and a natural protection zone.
+
+```{r}
+  anti_join(
+    amc_1991_2022 |> as_tibble() |> select(code_amc),
+    a,
+    by = "code_amc"
+  ) |> 
+  left_join(
+    muni_to_amc,
+    
+    by = "code_amc"
+  ) |> 
+  as_tibble() |> 
+  select(- geom)
+```
+
+# Generate RDS
+
+```{r}
+bulk_write_rds(
+  # market access
+  ma,
+  # transportation costs
+  tc_by_amc
+)
+```
