@@ -363,7 +363,7 @@ Compared to my larger AMC dataframe, I have no market access for Fernando de Nor
 ```{r}
   anti_join(
     amc_1991_2022 |> as_tibble() |> select(code_amc),
-    a,
+    ma,
     by = "code_amc"
   ) |> 
   left_join(
@@ -375,12 +375,53 @@ Compared to my larger AMC dataframe, I have no market access for Fernando de Nor
   select(- geom)
 ```
 
+# Market access panel
+
+```{r}
+
+ma_long <- full_join(
+  # Step 1: Pivot longer for the `ma` columns
+  ma |> 
+    select(
+      code_amc, code_state,
+      `1991` = ma_1991,
+      `2000` = ma_2000,
+      `2010` = ma_2010
+    ) |> 
+    pivot_longer(
+      cols = c(`1991`, `2000`, `2010`),
+      names_to = "year_ma",
+      values_to = "ma"
+    ),
+  
+  # Step 2: Pivot longer for the `ma_norm` columns
+  ma |> 
+    select(
+      code_amc, code_state,
+      `1991` = ma_1991_norm,
+      `2000` = ma_2000_norm,
+      `2010` = ma_2010_norm
+    ) |> 
+    pivot_longer(
+      cols = c(`1991`, `2000`, `2010`),
+      names_to = "year_ma",
+      values_to = "ma_norm"
+    ),
+  
+  # By code, year and state
+  
+  by = c("code_amc", "year_ma", "code_state")
+)
+
+```
+
 # Generate RDS
 
 ```{r}
 bulk_write_rds(
   # market access
   ma,
+  ma_long,
   # transportation costs
   tc_by_amc
 )
