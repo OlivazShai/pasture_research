@@ -43,26 +43,13 @@ bulk_read_rds(
 
 ## Transportation Costs
 
+
+I use a raster of quality adjusted transportation cost to major ports, developed by Rafael Araujo. 
+
 ```{r}
 tc <- rast(
   x = "../Inputs/cost_raster_raster_proj.tif"
   )
-```
-
-## AMC terra vector
-
-```{r}
-amc_tr <- amc_1991_2022 |> 
-  # remove amc area column
-  select(
-    - area_amc
-  ) |> 
-  # match crs with raster
-  st_transform(
-    crs(tc)
-  ) |>
-  # save with terra
-  vect()
 ```
 
 # Protected areas
@@ -126,7 +113,22 @@ tc_unprotected <- tc |>
 
 # Transportation costs per AMC
 
-I use a raster of quality adjusted transportation cost to major ports, developed by Rafael Araujo.
+## AMC terra vector
+
+```{r}
+amc_tr <- amc_1991_2022 |> 
+  # remove amc area column
+  select(
+    - area_amc
+  ) |> 
+  # match crs with raster
+  st_transform(
+    crs(tc)
+  ) |>
+  # save with terra
+  vect()
+```
+
 
 ## TC - Summary statistics by AMC
 
