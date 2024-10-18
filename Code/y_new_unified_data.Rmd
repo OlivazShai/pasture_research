@@ -38,7 +38,8 @@ bulk_read_rds(
   agg_census_data,
   ssiv,
   tc_by_amc,
-  ma
+  ma_long,
+  si_by_amc
   )
 ```
 
@@ -67,7 +68,7 @@ joined_data <- left_join(
       lead(ssiv),
       NA)
   ) |>
-  # join with census data
+  ############ join with census data
   right_join(
     agg_census_data,
     
@@ -78,9 +79,25 @@ joined_data <- left_join(
     local_price = av_price_slaughter*1000,
     local_price_2 = (av_price_slaughter/mean_price)*mean_price_2*1000,
     # fixed efects
-    fe_amc = as_factor(code_amc)
+    fe_amc = as_factor(code_amc),
+  ) |> 
+  #############3 include controls
+  left_join(
+    tc_by_amc,
+    by = "code_amc"
+  ) |> 
+  left_join(
+    ma_long,
+    by = c("code_amc", "year")
+  ) |> 
+  left_join(
+    si_by_amc,
+    by = "code_amc"
   )
+
 ```
+
+
 
 # Regression
 
@@ -89,18 +106,40 @@ joined_data <- left_join(
 ```{r}
 m1 <- feols(
   data = joined_data,
-  sw(cattle_heads_big, cattle_heads_big/area_amc) ~ 1 | csw(1,main_biome,year) | local_price + local_price_2 ~ ssiv + ssiv_2,
+  cattle_heads_big/area_amc ~ sw(1, si_mean + ma) | csw(1,main_biome,code_state,year) | local_price + local_price_2 ~ ssiv + ssiv_2,
    panel.id = c("code_amc","year"),
   cluster = "fe_amc"
   )
 
 m2 <- feols(
   data = joined_data,
-  cattle_heads_big ~ 1 | csw(1,main_biome,year) | local_price + local_price_2 ~ ssiv + ssiv_2,
+  cattle_heads_big ~ sw(1, si_mean + ma) | csw(1,main_biome,code_state,year) | local_price + local_price_2 ~ ssiv + ssiv_2,
    panel.id = c("code_amc","year"),
   cluster = "fe_amc"
   )
+```
 
+
+## Results
+
+```{r}
+etable(m1, stage=1)
+```
+
+
+## Tables
+
+```{r}
+etable(
+    m1,
+    stage = 2,
+    tex = T,
+    fitstat = ~ n + f + ivfall
+    )
+```
+
+
+```{r}
 etable(
     m2,
     stage = 2,
@@ -108,6 +147,20 @@ etable(
     fitstat = ~ n + f + ivfall
     )
 ```
+
+```{r}
+etable(
+    m2,
+    stage = 1,
+    tex = T,
+    fitstat = ~ n + f + ivfall
+    )
+```
+
+
+
+
+
 
 ## amazonia
 
