@@ -338,9 +338,6 @@ shares_by_amc <- left_join(
   )
 ```
 
-```{r}
-bulk_write_rds(cattle_heads_census_1995, shares_by_amc)
-```
 
 # Census 2006
 
@@ -746,11 +743,13 @@ agg_census_data <- bind_rows(
 
 # Save as RDS
 
-```{r, eval=FALSE}
+```{r}
 bulk_write_rds(
   cattle_census_2006,
   cattle_census_2017,
-  agg_census_data
+  agg_census_data,
+  cattle_heads_census_1995, 
+  shares_by_amc
   )
 ```
 
