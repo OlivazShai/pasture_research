@@ -1,0 +1,33 @@
+---
+title: "Agroclimatic Data"
+author: "Shai Vaz"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+# Data Wrangling
+library(dplyr)
+library(readr)
+library(tidyr)
+library(stringr)
+library(readxl)
+library(forcats)
+
+# Graphics
+library(ggplot2)
+
+# Geographic
+library(sf)
+library(terra)
+
+# Personal functions
+source("../Functions/bulk_rds.R")
+```
+
+# FAO GAEZ - Pasture suitability
+
