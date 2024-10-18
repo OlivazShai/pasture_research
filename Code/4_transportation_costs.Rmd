@@ -411,8 +411,15 @@ ma_long <- full_join(
   # By code, year and state
   
   by = c("code_amc", "year_ma", "code_state")
-)
-
+  ) |> 
+  # Define `year` as the following agro census year
+  mutate(
+    year = case_when(
+      year_ma == "1991" ~ 1995,
+      year_ma == "2000" ~ 2006,
+      year_ma == "2010" ~ 2017
+    )
+  )
 ```
 
 # Generate RDS
