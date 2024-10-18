@@ -43,7 +43,6 @@ bulk_read_rds(
 
 ## Transportation Costs
 
-
 I use a raster of quality adjusted transportation cost to major ports, developed by Rafael Araujo. 
 
 ```{r}
