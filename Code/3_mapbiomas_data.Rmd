@@ -13,14 +13,12 @@ knitr::opts_chunk$set(echo = TRUE)
 # Data Wrangling
 library(dplyr)
 library(tidyr)
+library(tidyr)
 library(stringr)
 library(readxl)
 
-# Graphics
-library(ggplot2)
-
 # Geographic
-# library(sf)
+library(datazoom.amazonia)
 ```
 
 # Landcover data
@@ -76,5 +74,13 @@ write_rds(
   file = "../Variables/pasture_cover.rds"
   )
 ```
+
+
+# Importing transitions
+
+
+
+
+
 
 
