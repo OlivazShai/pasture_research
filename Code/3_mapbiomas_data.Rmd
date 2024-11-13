@@ -79,6 +79,12 @@ write_rds(
 # Importing transitions
 
 
+```{r}
+transitions <- read_xlsx(
+  path = "../Inputs/mapbiomas_transitions.xlsx",
+  sheet = "transitions"
+  )
+```
 
 
 
