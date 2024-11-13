@@ -85,6 +85,14 @@ transitions <- read_xlsx(
   sheet = "transitions"
   )
 ```
+```{r}
+data <- load_mapbiomas(
+  dataset = "mapbiomas_transition",
+  raw_data = FALSE,
+  geo_level = "municipality",
+  language = "eng"
+)
+  ```
 
 
 
