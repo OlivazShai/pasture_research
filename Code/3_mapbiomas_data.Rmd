@@ -1,7 +1,7 @@
 ---
 title: "Mapbiomas Data"
 author: "Shai Vaz"
-date: "May 2024"
+date:  "`r format(Sys.time(), '%d %B, %Y')`"
 output: pdf_document
 ---
 
@@ -21,80 +21,27 @@ library(readxl)
 library(datazoom.amazonia)
 ```
 
-# Landcover data
+# Importing data
 
-## Raw dataframe
+I'll extract the land cover and transitions data from MapBiomas through the Datazoom package. They present data from Collection 8, and it's already treated. 
+
+## Land cover
 
 ```{r}
-land_cover <- read_xlsx(
-  path = "../Inputs/mapbiomas_land_cover.xlsx",
-  sheet = "land_cover"
+land_cover <- load_mapbiomas(
+  dataset = "mapbiomas_cover",
+  raw_data = FALSE,
+  geo_level = "municipality",
+  language = "eng"
   )
 ```
-
-## Pasture cover
-
-```{r}
-pasture_cover <- land_cover %>% 
-  filter(
-    class_id == 15
-  ) %>% 
-  pivot_longer(
-    cols = as.character(1985:2022),
-    names_to = "year",
-    values_to = "pasture_cover"
-  ) %>% 
-  select(
-    year, municipality_state, biome, geocode, pasture_cover
-  ) %>% 
-  # sum landcover from all biomes in each municipality
-  group_by(
-    year, geocode, municipality_state
-  ) %>% 
-  reframe(
-    pasture_cover = sum(pasture_cover, na.rm = TRUE)
-  ) %>% 
-  filter(
-    year > 1995
-  ) %>% 
-  rename(
-    code_muni = geocode,
-    muni_state = municipality_state
-  ) %>% 
-  mutate(
-    code_muni = as.character(code_muni)
-  )
-```
-
-# Generate RDSs
+## Transition matrices
 
 ```{r}
-write_rds(
-  pasture_cover,
-  file = "../Variables/pasture_cover.rds"
-  )
-```
-
-
-# Importing transitions
-
-
-```{r}
-transitions <- read_xlsx(
-  path = "../Inputs/mapbiomas_transitions.xlsx",
-  sheet = "transitions"
-  )
-```
-```{r}
-data <- load_mapbiomas(
+transition <- load_mapbiomas(
   dataset = "mapbiomas_transition",
   raw_data = FALSE,
   geo_level = "municipality",
   language = "eng"
-)
-  ```
-
-
-
-
-
+  )
+```
