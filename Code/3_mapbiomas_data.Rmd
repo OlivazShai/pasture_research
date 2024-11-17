@@ -17,8 +17,15 @@ library(tidyr)
 library(stringr)
 library(readxl)
 
+# Datatable
+library(data.table)
+library(dtplyr)
+
 # Geographic
 library(datazoom.amazonia)
+
+# Personal functions
+source("../Functions/bulk_rds.R")
 ```
 
 # Importing data
@@ -33,8 +40,10 @@ land_cover <- load_mapbiomas(
   raw_data = FALSE,
   geo_level = "municipality",
   language = "eng"
-  )
+  ) |> 
+  as.data.table()
 ```
+
 ## Transition matrices
 
 ```{r}
@@ -43,5 +52,103 @@ transition <- load_mapbiomas(
   raw_data = FALSE,
   geo_level = "municipality",
   language = "eng"
+  ) |> 
+  as.data.table()
+```
+
+# Cleaning data
+
+## Clean Land cover
+
+I will aggregate the data by land use, since I only need data for more aggregate levels. 
+
+```{r}
+land_cover_summarised <- land_cover |> 
+  mutate(
+    land_use = case_when(
+      # forest 
+      level_1 == "1. Forest" ~ "forest",
+      # non-forest natural formation
+      level_1 == "2. Non Forest Natural Formation" ~ "non_forest",
+      # Agriculture
+      level_2 == "Agriculture" ~ "agriculture",
+      # Pasture
+      level_2 == "Pasture" ~ "pasture",
+      # Other
+      .default = "other"
+    )
+  ) |> 
+  # group by municipality - year - land use
+  group_by(
+    municipality_code,
+    municipality_state,
+    year,
+    land_use
+  ) |>
+  # aggregate
+  summarise(
+    .groups = "keep",
+    area = sum(value, na.rm = T)
   )
 ```
+
+## Clean transitions
+
+```{r}
+transition_summarised <- transition |> 
+  mutate(
+    # LAND USE TO
+    to_land_use = case_when(
+      # forest 
+      to_level_1 == "1. Forest" ~ "forest",
+      # non-forest natural formation
+      to_level_1 == "2. Non Forest Natural Formation" ~ "non_forest",
+      # Agriculture
+      to_level_2 == "Agriculture" ~ "agriculture",
+      # Pasture
+      to_level_2 == "Pasture" ~ "pasture",
+      # Other
+      .default = "other"
+    ),
+    
+    # LAND USE FROM
+    from_land_use = case_when(
+      # forest 
+      from_level_1 == "1. Forest" ~ "forest",
+      # non-forest natural formation
+      from_level_1 == "2. Non Forest Natural Formation" ~ "non_forest",
+      # Agriculture
+      from_level_2 == "Agriculture" ~ "agriculture",
+      # Pasture
+      from_level_2 == "Pasture" ~ "pasture",
+      # Other
+      .default = "other"
+    ),
+    
+    # YEAR FROM
+    year_from = as.numeric(
+      str_split_i(year, "_", 1)
+      ),
+    # YEAR TO
+    year_to = as.numeric(
+      str_split_i(year, "_", 2)
+      )
+  ) |> 
+  # Select transitions from consecutive years
+  filter(
+   year_to == year_from + 1 
+  ) |> 
+  # group by municipality - year to and from - land uses to and from 
+  group_by(
+    municipality_code,
+    municipality_state,
+    year_from, year_to,
+    from_land_use, to_land_use
+  ) |>
+  # aggregate
+  summarise(
+    .groups = "keep",
+    value = sum(value, na.rm = T)
+  )
+```
+
