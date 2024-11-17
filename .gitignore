@@ -54,3 +54,7 @@ Variables/baci_raw.rds
 Variables/muni_to_amc.rds
 Variables/municipalities.rds
 Inputs/mapbiomas_transitions.xlsx
+Variables/land_cover.rds
+Variables/land_cover_summarised.rds
+Variables/transition.rds
+Variables/transition_summarised.rds
