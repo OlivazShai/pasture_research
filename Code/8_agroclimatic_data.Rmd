@@ -153,10 +153,13 @@ si_by_amc |>
       )
 ```
 
-# Save as RDS
+## Save as RDS
 
 ```{r}
 bulk_write_rds(
   si_by_amc
 )
 ```
+
+# Climatic data
+
