@@ -56,3 +56,4 @@ Variables/land_cover.rds
 Variables/land_cover_summarised.rds
 Variables/transition.rds
 Variables/transition_summarised.rds
+Variables/transition_by_amc_long.rds
