@@ -22,6 +22,7 @@ library(data.table)
 library(dtplyr)
 
 # Geographic
+library(sf)
 library(datazoom.amazonia)
 
 # Personal functions
@@ -89,7 +90,16 @@ land_cover_summarised <- land_cover |>
   summarise(
     .groups = "keep",
     area = sum(value, na.rm = T)
-  )
+  ) |> 
+  ungroup(
+    
+  ) |> 
+  # standard variable name
+  mutate(
+    code_muni = as.character(municipality_code),
+    .before = "municipality_state",
+    municipality_code = NULL
+  ) 
 ```
 
 ## Clean transitions
@@ -149,6 +159,143 @@ transition_summarised <- transition |>
   summarise(
     .groups = "keep",
     value = sum(value, na.rm = T)
+  ) |> 
+  ungroup(
+    
+  ) |> 
+  # standard variable name
+  mutate(
+    code_muni = as.character(municipality_code),
+    .before = "municipality_state",
+    municipality_code = NULL
+  ) 
+```
+
+# Agregate by AMC
+
+## Land cover
+
+Now I aggregate the land cover data by AMC.
+
+```{r}
+land_cover_by_amc_long <- left_join(
+  # land cover by municipality
+  land_cover_summarised ,
+  
+  # municipality to amc translator
+  muni_to_amc |> 
+   select(
+     code_amc,
+     code_muni
+   ),
+  
+  by = "code_muni"
+  ) |> 
+  # Group by amc - year - land use
+  group_by(
+    code_amc,
+    year,
+    land_use
+  ) |> 
+  # Aggregate
+  summarise(
+    .groups = "keep",
+    area = sum(area, na.rm = T)
+  ) |> 
+  ungroup()
+```
+
+### Wide version
+
+And I make a wide version, which will be the main data used.
+
+```{r}
+land_cover_by_amc <- land_cover_by_amc_long |> 
+  pivot_wider(
+    id_cols = c(code_amc, year),
+    names_from = land_use,
+    values_from = area
   )
+```
+
+## Transitions
+
+```{r}
+transition_by_amc_long <- left_join(
+  # land cover by municipality
+  transition_summarised ,
+  
+  # municipality to amc translator
+  muni_to_amc |> 
+   select(
+     code_amc,
+     code_muni
+   ),
+  
+  by = "code_muni"
+  ) |> 
+  # Group by amc - year - land use
+  group_by(
+    code_amc,
+    year_from, year_to,
+    from_land_use, to_land_use
+  ) |> 
+  # Aggregate
+  summarise(
+    .groups = "keep",
+    value = sum(value, na.rm = T)
+  ) |> 
+  ungroup(
+    
+  ) |> 
+  # calculate conversion probabilities
+  mutate(
+    # grouping by AMC - year - from_land_use
+    .by = c(code_amc, year_from, year_to, from_land_use),
+    
+    # probability of conversion TO each land use
+    prob = value / sum(value, na.rm = T)
+  )
+```
+
+### Wide version
+
+I'll also make a wide version of the transition data.
+
+
+```{r}
+transition_by_amc <- transition_by_amc_long |>
+  rename(
+    from = from_land_use,
+    to = to_land_use
+  ) |> 
+  pivot_wider(
+    id_cols = c(code_amc, year_from, year_to),
+    
+    names_from = c(from, to),
+    
+    values_from = prob,
+    
+    names_sort = TRUE
+  )
+```
+
+# Save as RDS
+
+```{r}
+bulk_write_rds(
+  # raw
+  land_cover,
+  transition,
+  # summarised
+  land_cover_summarised,
+  transition_summarised,
+  # by amc
+  land_cover_by_amc_long,
+  land_cover_by_amc,
+  
+  transition_by_amc_long,
+  transition_by_amc
+)
 ```
 
