@@ -16,9 +16,6 @@ library(tidyr)
 library(stringr)
 library(readr)
 
-# Graphics
-library(ggplot2)
-
 # Geographic
 library(sf)
 library(sidrar)
@@ -460,7 +457,10 @@ muni_to_amc <- left_join(
     select(code_amc, main_biome, code_biome),
   
   by = "code_amc"
-  )
+  ) |>
+  # remove the geometries for memory economy
+  as_tibble() |> 
+  select(-geom)
 ```
 
 ## Generate RDSs
