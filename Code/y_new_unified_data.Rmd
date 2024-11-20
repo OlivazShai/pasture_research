@@ -27,19 +27,29 @@ library(sf)
 # Econometrics
 library(fixest)
 library(ivreg)
+
+# Personal functions
+source("../Functions/bulk_rds.R")
 ```
 
 # Importing files
 
 ```{r}
 bulk_read_rds(
+  # prices
   national_prices,
   cattle_prices_cepea_in_census_years,
+  ipca_census_years,
+  # census data
   agg_census_data,
+  # instruments
   ssiv,
+  # controls
   tc_by_amc,
   ma_long,
-  si_by_amc
+  si_by_amc,
+  # mapbiomas
+  land_cover_by_amc
   )
 ```
 
@@ -56,11 +66,16 @@ joined_data <- left_join(
   
   by = c("year" = "census_year")
   ) |> 
-  # get next period prices and shifters
+  ########## get next period prices and shifters
   mutate(
     mean_price_2 = if_else(
       year == 2006 | year == 2017,
       lead(mean_price),
+      NA),
+    
+    mean_nominal_price_2 = if_else(
+      year == 2006 | year == 2017,
+      lead(mean_nominal_price),
       NA),
     
     ssiv_2 = if_else(
@@ -73,15 +88,22 @@ joined_data <- left_join(
     agg_census_data,
     
     by = c("code_amc", "year")
-  ) |>  
-  mutate(
-    # projecting local prices ahead
-    local_price = av_price_slaughter*1000,
-    local_price_2 = (av_price_slaughter/mean_price)*mean_price_2*1000,
-    # fixed efects
-    fe_amc = as_factor(code_amc),
+  ) |>
+  ############ join with inflation
+  left_join(
+    ipca_census_years,
+    
+    by = c("year" = "census_year")
   ) |> 
-  #############3 include controls
+  ############ deflate and project ahead local prices
+  mutate(
+    local_price = av_price_slaughter*1000,
+    
+    # *(index_2022/index)
+    local_price_2 = av_price_slaughter
+                    *(mean_nominal_price_2/mean_nominal_price)*1000,
+  ) |> 
+  ############# include controls
   left_join(
     tc_by_amc,
     by = "code_amc"
@@ -93,10 +115,16 @@ joined_data <- left_join(
   left_join(
     si_by_amc,
     by = "code_amc"
+  ) |> 
+  ############ include land use
+  left_join(
+    land_cover_by_amc |> 
+      mutate(year = as.numeric(year)),
+    
+    by = c("code_amc", "year")
   )
 
 ```
-
 
 
 # Regression
@@ -106,24 +134,32 @@ joined_data <- left_join(
 ```{r}
 m1 <- feols(
   data = joined_data,
-  cattle_heads_big/area_amc ~ sw(1, si_mean + ma) | csw(1,main_biome,code_state,year) | local_price + local_price_2 ~ ssiv + ssiv_2,
+  cattle_heads_big/area_amc ~ sw(1, si_mean + ma + I(pasture/area_amc*100)) | csw(1,main_biome,code_state) | local_price + local_price_2 ~ ssiv + ssiv_2,
    panel.id = c("code_amc","year"),
-  cluster = "fe_amc"
+  cluster = "code_amc"
   )
 
 m2 <- feols(
   data = joined_data,
-  cattle_heads_big ~ sw(1, si_mean + ma) | csw(1,main_biome,code_state,year) | local_price + local_price_2 ~ ssiv + ssiv_2,
+  cattle_heads_big ~ sw(1, si_mean + ma) | csw(1,main_biome,code_state) | local_price + local_price_2 ~ ssiv + ssiv_2,
    panel.id = c("code_amc","year"),
-  cluster = "fe_amc"
+  cluster = "code_amc"
   )
+```
+
+```{r}
+joined_data |> 
+  mutate(
+    m = (cattle_heads_big/pasture)
+  ) |> 
+  View()
 ```
 
 
 ## Results
 
 ```{r}
-etable(m1, stage=1)
+etable(m1, stage=2)
 ```
 
 
@@ -159,15 +195,12 @@ etable(
 
 
 
-
-
-
 ## amazonia
 
 ```{r}
 feols(
-  data = joined_data |> filter(code_biome == 1),
-  cattle_heads_big ~ 1 | local_price + local_price_2 ~ ssiv + ssiv_2
+  data = joined_data,
+  cattle_heads_big/area_amc ~ 1 |main_biome + code_state| local_price + local_price_2 ~ ssiv + ssiv_2,
   ) |> 
   etable()
 ```
