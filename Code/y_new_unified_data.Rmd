@@ -27,6 +27,7 @@ library(sf)
 # Econometrics
 library(fixest)
 library(ivreg)
+library(stats)
 
 # Personal functions
 source("../Functions/bulk_rds.R")
@@ -257,3 +258,56 @@ feols(
   ) |> 
   etable()
 ```
+
+# Extensive margin
+
+```{r}
+ext_data <- transition_by_amc |> 
+  select(
+    code_amc,
+    year = year_from,
+    forest_agriculture, non_forest_agriculture, forest_pasture, non_forest_pasture
+  ) |> 
+  rowwise(
+    
+  ) |> 
+  mutate(
+    rho_1 = sum(forest_pasture + non_forest_pasture, na.rm = T) 
+  ) |> 
+  ungroup(
+    
+  ) |> 
+  mutate(
+    rho_2 = lead(rho_1),
+    .by = code_amc
+  ) |> 
+  right_join(
+    joined_data,
+    by = c("code_amc", "year")
+  ) |>
+  filter(
+    rho_1 > 0 &
+    rho_1 < 1 &
+    rho_2 > 0 
+  ) |> 
+  mutate(
+    y = log(rho_1/(1-rho_1)) - 0.9* log(rho_2),
+    
+    x1 = 0.45*cattle_heads_big**2,
+    
+    x2 = 0.45*(cattle_heads_big/area_amc)**2
+  )
+```
+
+
+## Reg
+
+```{r}
+lm(
+  data = ext_data, # |> filter(code_biome %in% c(1,3)),
+  y ~ x2 + main_biome
+  ) |> 
+  summary()
+```
+
+
