@@ -165,6 +165,8 @@ transition_summarised <- transition |>
   ) |> 
   # standard variable name
   mutate(
+    year = as.numeric(year),
+    
     code_muni = as.character(municipality_code),
     .before = "municipality_state",
     municipality_code = NULL
@@ -280,6 +282,179 @@ transition_by_amc <- transition_by_amc_long |>
   )
 ```
 
+
+# Version aggregating native vegetation
+
+In this version, I'll do the same as before, but aggregating both categories of native vegetation (Forests and Non-forest native vegetation) in a single category. 
+
+## Land cover agg
+
+```{r}
+land_cover_agg_long <- land_cover |> 
+  mutate(
+    land_use = case_when(
+      # forest
+      level_1 == "1. Forest" ~ "natural",
+      # non-forest natural formation
+      level_1 == "2. Non Forest Natural Formation" ~ "natural",
+      # Agriculture
+      level_2 == "Agriculture" ~ "agriculture",
+      # Pasture
+      level_2 == "Pasture" ~ "pasture",
+      # Other
+      .default = "other"
+    )
+  ) |>
+  # standardise variable muni and year
+  mutate(
+    year = as.numeric(year),
+    
+    code_muni = as.character(municipality_code),
+    .before = "municipality_state",
+    municipality_code = NULL
+  ) |> 
+  # join with municipality to amc translator
+  left_join(
+    
+    muni_to_amc |> 
+     select(
+       code_amc,
+       code_muni
+     ),
+    
+    by = "code_muni"
+  ) |> 
+  # Group by amc - year - land use
+  group_by(
+    code_amc,
+    year,
+    land_use
+  ) |> 
+  # Aggregate
+  summarise(
+    .groups = "keep",
+    area = sum(value, na.rm = T)
+  ) |> 
+  ungroup()
+```
+
+## Land cover agg - wide
+
+```{r}
+land_cover_agg <- land_cover_agg_long |> 
+  pivot_wider(
+    id_cols = c(code_amc, year),
+    names_from = land_use,
+    values_from = area
+  )
+```
+
+## Transitions agg
+
+```{r}
+transition_agg_long <- transition |> 
+  mutate(
+    # LAND USE TO
+    to_land_use = case_when(
+      # forest 
+      to_level_1 == "1. Forest" ~ "natural",
+      # non-forest natural formation
+      to_level_1 == "2. Non Forest Natural Formation" ~ "natural",
+      # Agriculture
+      to_level_2 == "Agriculture" ~ "agriculture",
+      # Pasture
+      to_level_2 == "Pasture" ~ "pasture",
+      # Other
+      .default = "other"
+    ),
+    
+    # LAND USE FROM
+    from_land_use = case_when(
+      # forest 
+      from_level_1 == "1. Forest" ~ "natural",
+      # non-forest natural formation
+      from_level_1 == "2. Non Forest Natural Formation" ~ "natural",
+      # Agriculture
+      from_level_2 == "Agriculture" ~ "agriculture",
+      # Pasture
+      from_level_2 == "Pasture" ~ "pasture",
+      # Other
+      .default = "other"
+    ),
+    
+    # YEAR FROM
+    year_from = as.numeric(
+      str_split_i(year, "_", 1)
+      ),
+    # YEAR TO
+    year_to = as.numeric(
+      str_split_i(year, "_", 2)
+      )
+  ) |> 
+  # Select transitions from consecutive years
+  filter(
+   year_to == year_from + 1 
+  ) |> 
+  # standardise variable name
+  mutate(
+    code_muni = as.character(municipality_code),
+    .before = "municipality_state",
+    municipality_code = NULL
+  ) |> 
+  # join with municipality to amc translator
+  left_join(
+    
+    muni_to_amc |> 
+     select(
+       code_amc,
+       code_muni
+     ),
+    
+    by = "code_muni"
+  ) |> 
+  # Group by amc - year - land use
+  group_by(
+    code_amc,
+    year_from, year_to,
+    from_land_use, to_land_use
+  ) |>
+  # aggregate
+  summarise(
+    .groups = "keep",
+    value = sum(value, na.rm = T)
+  ) |> 
+  ungroup(
+    
+  ) |> 
+  # calculate conversion probabilities
+  mutate(
+    # grouping by AMC - year - from_land_use
+    .by = c(code_amc, year_from, year_to, from_land_use),
+    
+    # probability of conversion TO each land use
+    prob = value / sum(value, na.rm = T)
+  )
+```
+
+## Transitions agg - wide
+
+```{r}
+transition_agg <- transition_agg_long |>
+  rename(
+    from = from_land_use,
+    to = to_land_use
+  ) |> 
+  pivot_wider(
+    id_cols = c(code_amc, year_from, year_to),
+    
+    names_from = c(from, to),
+    
+    values_from = prob,
+    
+    names_sort = TRUE
+  )
+```
+
 # Save as RDS
 
 ```{r}
@@ -291,11 +466,11 @@ bulk_write_rds(
   land_cover_summarised,
   transition_summarised,
   # by amc
-  land_cover_by_amc_long,
   land_cover_by_amc,
-  
-  transition_by_amc_long,
-  transition_by_amc
+  transition_by_amc,
+  # aggregated version
+  land_cover_agg,
+  transition_agg
 )
 ```
 
