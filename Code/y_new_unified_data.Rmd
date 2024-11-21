@@ -50,7 +50,8 @@ bulk_read_rds(
   ma_long,
   si_by_amc,
   # mapbiomas
-  land_cover_by_amc
+  land_cover_agg,
+  transition_agg
   )
 ```
 
@@ -119,12 +120,10 @@ joined_data <- left_join(
   ) |> 
   ############ include land use
   left_join(
-    land_cover_by_amc |> 
-      mutate(year = as.numeric(year)),
+    land_cover_agg,
     
     by = c("code_amc", "year")
   )
-
 ```
 
 
@@ -162,7 +161,6 @@ joined_data |>
 ```{r}
 etable(m1, stage=2)
 ```
-
 
 ## Tables
 
@@ -262,20 +260,11 @@ feols(
 # Extensive margin
 
 ```{r}
-ext_data <- transition_by_amc |> 
+ext_data <- transition_agg |> 
   select(
     code_amc,
-    year = year_from,
-    forest_agriculture, non_forest_agriculture, forest_pasture, non_forest_pasture
-  ) |> 
-  rowwise(
-    
-  ) |> 
-  mutate(
-    rho_1 = sum(forest_pasture + non_forest_pasture, na.rm = T) 
-  ) |> 
-  ungroup(
-    
+    year = year_to,
+    rho_1 = natural_pasture
   ) |> 
   mutate(
     rho_2 = lead(rho_1),
@@ -286,14 +275,14 @@ ext_data <- transition_by_amc |>
     by = c("code_amc", "year")
   ) |>
   filter(
-    rho_1 > 0 &
-    rho_1 < 1 &
-    rho_2 > 0 
+    rho_1 != 0 &
+    rho_1 != 1 &
+    rho_2 != 0 
   ) |> 
   mutate(
     y = log(rho_1/(1-rho_1)) - 0.9* log(rho_2),
     
-    x1 = 0.45*cattle_heads_big**2,
+    x1 = 0.45*(cattle_heads_big**2)/10000000,
     
     x2 = 0.45*(cattle_heads_big/area_amc)**2
   )
@@ -303,11 +292,12 @@ ext_data <- transition_by_amc |>
 ## Reg
 
 ```{r}
-lm(
+feols(
   data = ext_data, # |> filter(code_biome %in% c(1,3)),
-  y ~ x2 + main_biome
+  y ~ x2 + ma | main_biome,
+  cluster = "code_amc"
   ) |> 
-  summary()
+  etable()
 ```
 
 
