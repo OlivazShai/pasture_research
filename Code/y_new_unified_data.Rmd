@@ -43,6 +43,8 @@ bulk_read_rds(
   ipca_census_years,
   # census data
   agg_census_data,
+  # survey data
+  cattle_heads_ppm,
   # instruments
   ssiv,
   # controls
@@ -134,7 +136,7 @@ joined_data <- left_join(
 ```{r}
 m1 <- feols(
   data = joined_data,
-  cattle_heads_big/area_amc ~ sw(1, si_mean + ma + I(pasture/area_amc*100)) | csw(1,main_biome,code_state) | local_price + local_price_2 ~ ssiv + ssiv_2,
+  cattle_heads_big/area_amc ~ sw(1, si_mean + ma_norm + I(pasture/area_amc*100)) | csw(1,main_biome,code_state) | local_price + local_price_2 ~ ssiv + ssiv_2,
    panel.id = c("code_amc","year"),
   cluster = "code_amc"
   )
@@ -294,10 +296,87 @@ ext_data <- transition_agg |>
 ```{r}
 feols(
   data = ext_data, # |> filter(code_biome %in% c(1,3)),
-  y ~ x2 + ma | main_biome,
+  y ~  main_biome:x2 + ma_norm | main_biome,
   cluster = "code_amc"
   ) |> 
   etable()
 ```
 
+## PPM version
+
+
+```{r}
+ext_ppm <- cattle_heads_ppm |> 
+  left_join(
+    muni_to_amc |> select(-name_muni),
+    by = join_by(code_muni)
+  ) |> 
+  summarise(
+    .by = c("code_amc", "year"),
+    
+    cattle_heads = sum(cattle_heads, na.rm = TRUE),
+    main_biome = unique(main_biome),
+    code_biome = unique(code_biome)
+  ) |> 
+  left_join(
+    ma_long |> 
+      filter(year == 2006) |> 
+      select(-year_ma, -year),
+    
+    by = "code_amc"
+  ) |> 
+  mutate(
+    year = as.numeric(year)
+  ) |> 
+  left_join(
+    by = join_by(code_amc, year), 
+    
+    transition_agg |>
+      select(
+          code_amc,
+          year = year_to,
+          rho_1 = natural_pasture
+      ) |> 
+      mutate(
+        rho_2 = lead(rho_1),
+        .by = code_amc
+    )
+  ) |> 
+  left_join(
+    by = c("code_amc", "year"),
+    
+    ssiv |> 
+      select(
+      year, code_amc, psi, area_amc, ssiv  
+      ) |> 
+      mutate(
+        ssiv2 = lead(ssiv),
+        .by = "code_amc"
+      )
+  ) |> 
+  mutate(
+    y = log(rho_1/(1-rho_1)) - 0.9* log(rho_2),
+    
+    x1 = 0.45*(cattle_heads**2)/10000000,
+    
+    x2 = 0.45*(cattle_heads/area_amc)**2
+  ) |> 
+  filter(
+    year > 2000,
+    year < 2022
+  ) |> 
+  mutate(
+    fe = as.factor(code_amc)
+  )
+```
+
+
+```{r}
+feols(
+  data = ext_ppm, # filter(code_biome %in% c(1,3)),
+  y ~ x2 + ma_norm | main_biome,
+  cluster = "code_amc"
+  ) |> 
+  etable()
+```
 
