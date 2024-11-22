@@ -53,7 +53,8 @@ bulk_read_rds(
   si_by_amc,
   # mapbiomas
   land_cover_agg,
-  transition_agg
+  transition_agg,
+  past_qual
   )
 ```
 
@@ -125,7 +126,12 @@ joined_data <- left_join(
     land_cover_agg,
     
     by = c("code_amc", "year")
-  )
+  ) |> 
+  ############ include pasture quality
+  left_join(
+    past_qual,
+    by = c("code_amc", "year")
+  ) 
 ```
 
 
@@ -136,7 +142,7 @@ joined_data <- left_join(
 ```{r}
 m1 <- feols(
   data = joined_data,
-  cattle_heads_big/area_amc ~ sw(1, si_mean + ma_norm + I(pasture/area_amc*100)) | csw(1,main_biome,code_state) | local_price + local_price_2 ~ ssiv + ssiv_2,
+  cattle_heads_big/area_amc ~ sw(ma_norm +high_share, ma_norm + low_share, ma_norm + low_share+mid_share, ma_norm+ I(low_share+mid_share)) | csw(1,main_biome,code_state) | local_price + local_price_2 ~ ssiv + ssiv_2,
    panel.id = c("code_amc","year"),
   cluster = "code_amc"
   )
@@ -287,6 +293,9 @@ ext_data <- transition_agg |>
     x1 = 0.45*(cattle_heads_big**2)/10000000,
     
     x2 = 0.45*(cattle_heads_big/area_amc)**2
+  ) |> 
+  mutate(
+    x3 = 0.45*(cattle_heads_big/total)**2
   )
 ```
 
@@ -296,7 +305,8 @@ ext_data <- transition_agg |>
 ```{r}
 feols(
   data = ext_data, # |> filter(code_biome %in% c(1,3)),
-  y ~  main_biome:x2 + ma_norm | main_biome,
+  y ~  1 + ma_norm 
+  + sw(high_share, low_share, low_share+mid_share, I(low_share+mid_share) ) | main_biome | x2 ~ ssiv + ssiv_2,
   cluster = "code_amc"
   ) |> 
   etable()
@@ -357,7 +367,7 @@ ext_ppm <- cattle_heads_ppm |>
   mutate(
     y = log(rho_1/(1-rho_1)) - 0.9* log(rho_2),
     
-    x1 = 0.45*(cattle_heads**2)/10000000,
+    x1 = 0.45*(cattle_heads**2),
     
     x2 = 0.45*(cattle_heads/area_amc)**2
   ) |> 
@@ -367,6 +377,13 @@ ext_ppm <- cattle_heads_ppm |>
   ) |> 
   mutate(
     fe = as.factor(code_amc)
+  ) |> 
+  left_join(
+    past_qual,
+    by = c("code_amc", "year")
+  ) |> 
+  mutate(
+    x3 = 0.45*(cattle_heads/total)**2
   )
 ```
 
