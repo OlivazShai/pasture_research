@@ -15,7 +15,7 @@ library(dplyr)
 library(tidyr)
 library(tidyr)
 library(stringr)
-library(readxl)
+library(readr)
 
 # Datatable
 library(data.table)
@@ -29,7 +29,7 @@ library(datazoom.amazonia)
 source("../Functions/bulk_rds.R")
 ```
 
-# Importing data
+# Land use data importing
 
 I'll extract the land cover and transitions data from MapBiomas through the Datazoom package. They present data from Collection 8, and it's already treated. 
 
@@ -283,7 +283,7 @@ transition_by_amc <- transition_by_amc_long |>
 ```
 
 
-# Version aggregating native vegetation
+# Versions aggregating native vegetation
 
 In this version, I'll do the same as before, but aggregating both categories of native vegetation (Forests and Non-forest native vegetation) in a single category. 
 
@@ -455,6 +455,70 @@ transition_agg <- transition_agg_long |>
   )
 ```
 
+# Pasture quality 
+
+## Importing data
+
+```{r}
+past_qual_raw <- read_csv(
+  file = "../Inputs/pasture_quality/brasil_pasture_vigor_col9_s100.csv",
+  show_col_types = FALSE
+  )
+```
+
+## Cleaning and aggregating
+
+```{r}
+past_qual <- past_qual_raw |> 
+  # standard col name
+  mutate(
+    code_muni = as.character(geocod_mun)
+  ) |> 
+  rename(
+    year = ano,
+    class = classe,
+    area = area_past_ha
+  ) |> 
+  # join with amc translator
+  left_join(
+    muni_to_amc |> 
+      select(code_muni, code_amc),
+    
+    by = "code_muni" 
+  ) |> 
+  # aggregate areas by amc - year - classe
+  summarise(
+    .by = c("code_amc", "year", "class"),
+    
+    area = sum(area, na.rm = TRUE)
+  ) |> 
+  # pivot to wide format
+  pivot_wider(
+    id_cols = c(code_amc, year),
+    names_from = class,
+    values_from = area,
+    names_sort = TRUE
+  ) |> 
+  # rename classes
+  rename(
+    low_qual = "Severa",
+    mid_qual = "Intermediário",
+    high_qual = "Ausente"
+  ) |> 
+  # fill na with 0 
+  replace_na(
+    list(low_qual = 0, mid_qual = 0, high_qual = 0)
+  ) |> 
+  # calculate shares
+  mutate(
+    total = low_qual + mid_qual + high_qual,
+    low_share = low_qual/total,
+    mid_share = mid_qual/total,
+    high_share = high_qual/total
+  )
+```
+
+
 # Save as RDS
 
 ```{r}
@@ -470,7 +534,9 @@ bulk_write_rds(
   transition_by_amc,
   # aggregated version
   land_cover_agg,
-  transition_agg
+  transition_agg,
+  # pasture quality
+  past_qual
 )
 ```
 
