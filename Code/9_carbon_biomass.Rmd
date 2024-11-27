@@ -54,11 +54,11 @@ c_meta <- st_read(
   ) 
 
 # Reproject the dataframe
-# Use the same CRS as the AMCs (SIRGAS 2000) 
-  
+# Use the same CRS as Brazil (SIRGAS 2000) 
+
 c_meta <- st_transform(
-  carbon_meta,
-  st_crs(amc_1991_2022)
+  c_meta,
+  st_crs(brazil)
   )
 ```
 
@@ -66,11 +66,10 @@ c_meta <- st_transform(
 
 
 ```{r}
-st_intersection(
+c_meta_br <- st_intersection(
   c_meta,
   brazil
 )
 ```
-
 
 
