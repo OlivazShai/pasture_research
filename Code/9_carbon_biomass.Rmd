@@ -1,0 +1,76 @@
+---
+title: "Carbon biomass"
+author: "Shai Vaz"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+# Data Wrangling
+library(dplyr)
+library(readr)
+library(tidyr)
+
+# Geographic
+library(sf)
+library(terra)
+
+# Personal functions
+source("../Functions/bulk_rds.R")
+source()
+```
+
+# Importing external files
+
+```{r}
+bulk_read_rds(
+  brazil,
+  amc_1991_2022
+)
+```
+
+
+# Idea
+
+This is a very memory-intensive process. The data is divided in large tiles of satellite imagery. In a shapefile, I have data on the tiles location. 
+
+First, I select data on the tiles in Brazil.
+Second, I take the links to the API with pixel level data on each tile.
+Third, I write a function to open (terra), save as raster, and use the exact_extract algorithm to get the sum on each AMC, save it to a DF and remove the terra raster data from memory.
+I then map this function to each of the 15 or 16 tiles of the Brazilian territory.
+Finally, I aggregate the AMC-level DFs and summarise (fun = sum)
+
+# Open shapefile
+
+First, I open the metadata on the tiles, saved in a shapefile, which contains the location and the API link to download the raster.
+
+```{r}
+c_meta <- st_read(
+  "../Inputs/carbon_biomass/Aboveground_Live_Woody_Biomass_Density.shp"
+  ) 
+
+# Reproject the dataframe
+# Use the same CRS as the AMCs (SIRGAS 2000) 
+  
+c_meta <- st_transform(
+  carbon_meta,
+  st_crs(amc_1991_2022)
+  )
+```
+
+# Select region
+
+
+```{r}
+st_intersection(
+  c_meta,
+  brazil
+)
+```
+
+
+
