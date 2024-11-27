@@ -1,0 +1,3 @@
+Data source:
+
+https://data.globalforestwatch.org/datasets/aboveground-live-woody-biomass-density
