@@ -102,11 +102,12 @@ joined_data <- left_join(
   ) |> 
   ############ deflate and project ahead local prices
   mutate(
-    local_price = av_price_slaughter*1000,
+    local_price = av_price_slaughter * (index_2022/index)
+                  *1000,
     
     # *(index_2022/index)
-    local_price_2 = av_price_slaughter
-                    *(mean_nominal_price_2/mean_nominal_price)*1000,
+    local_price_2 = av_price_slaughter *(index_2022/index)
+                    *(mean_price_2/mean_price)*1000,
   ) |> 
   ############# include controls
   left_join(
@@ -149,13 +150,18 @@ iv <- feols(
   + si_mean:I(main_biome=="amazonia")
   + high_share
   + I(pasture/area_amc)
+  + year
   | sw(1,main_biome,code_state)
   | local_price + local_price_2 ~ ssiv + ssiv_2,
   panel.id = c("code_amc","year"),
   cluster = "code_amc"
   )
 
-etable(iv, stage=2, fitstat = ~ n + f + ivf)
+etable(
+  iv, 
+  stage=2, 
+  digits = 4,
+  fitstat = ~ n + f + ivf)
 ```
 
 
@@ -169,12 +175,18 @@ ols <- feols(
   + si_mean
   + high_share
   + I(pasture/area_amc)
+  + year
   | sw(1,main_biome,code_state, code_amc),
   panel.id = c("code_amc","year"),
   cluster = "code_amc"
   )
 
-etable(ols, stage=2, fitstat = ~ n + f + wf + r2 + wr2 + ar2)
+etable(
+  ols, 
+  stage=2, 
+  digits = 7,
+  fitstat = ~ n + f + wf + r2 + wr2 + ar2
+  )
 ```
 
 
@@ -308,22 +320,42 @@ ext_data <- transition_agg |>
 ```
 
 
-## Reg
+## OLS with Census
 
 ```{r}
 feols(
   data = ext_data,
   y ~ x2
   + ma_norm
-  + (si_q1_mean + si_q2_mean + si_q3_mean + si_q4_mean)
+  # + (si_q1_mean + si_q2_mean + si_q3_mean)
+  + si_q4_mean
   + high_share
+  + year
   | sw(main_biome, code_state, code_amc),
   cluster = "code_amc"
   ) |>  
   etable(fitstat = ~ n + f + f.p + wf + wf.p + r2 + ar2 + wr2)
 ```
 
-## PPM version
+## IV with census
+
+```{r}
+feols(
+  data = ext_data,
+  y ~
+  ma_norm
+  # + (si_q1_mean + si_q2_mean + si_q3_mean)
+  + si_q4_mean
+  + high_share
+  + year
+  | sw(main_biome, code_state, code_amc)
+  | x2 ~ ssiv + ssiv_2,
+  cluster = "code_amc"
+  ) |>  
+  etable(fitstat = ~ n + f + f.p + wf + wf.p)
+```
+
+# PPM version
 
 
 ```{r}
@@ -409,6 +441,7 @@ feols(
   + ma_norm
   + ma_norm:I(main_biome=="amazonia")
   + high_share
+  + year
   | sw(main_biome, code_state, code_amc),
   cluster = "code_amc"
   ) |> 
@@ -423,6 +456,7 @@ feols(
   + ma_norm
   + ma_norm:I(main_biome=="amazonia")
   + high_share
+  # + year
   | sw(main_biome, code_state, code_amc)
   | x2 ~ ssiv,
   cluster = "code_amc"
