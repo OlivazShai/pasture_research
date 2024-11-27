@@ -25,6 +25,18 @@ library(geobr)
 source("../Functions/bulk_rds.R")
 ```
 
+# Brazil
+
+The shape of the Brazilian territory.
+
+```{r}
+brazil <- read_country(
+  year = 2020,
+  simplified = FALSE
+)
+```
+
+
 # Municipality polygons
 
 ```{r}
@@ -281,7 +293,7 @@ biomes_raw <- read_biomes(
   )
 ```
 
-## Municipality \~ Biome intersections
+## Municipality ~ Biome intersections
 
 ### Municipalities with biomes
 
@@ -468,6 +480,7 @@ muni_to_amc <- left_join(
 ```{r}
 bulk_write_rds(
   # geographic
+  brazil,
   municipalities, 
   conservation_units, 
   indigenous_lands,
