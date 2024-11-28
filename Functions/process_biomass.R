@@ -90,7 +90,7 @@ process_biomass <- function(folder_path, zones) {
   
   # Step 5: Create a "biomass" column as the row sum of all x_i columns
   z <- z |> 
-    mutate(biomass = rowSums(select(., starts_with("x_")), na.rm = TRUE)) |> 
+    mutate(biomass = rowSums(select(starts_with("x_")), na.rm = TRUE)) |> 
     select(-starts_with("x_")) # Remove all x_i columns
   
   return(z)
