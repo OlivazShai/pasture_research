@@ -15,6 +15,7 @@ library(dplyr)
 library(readr)
 library(tidyr)
 library(glue)
+library(curl)
 
 # Geographic
 library(sf)
@@ -40,7 +41,7 @@ bulk_read_rds(
 
 This is a very memory-intensive process. The data is divided in large tiles of satellite imagery. In a shape-file, I have data on the tiles location. First, I select data on the tiles in Brazil, and save the links to the API with pixel level data on each tile.
 
-I wrote a function to open each tile, save the raster, and use the exact_extract algorithm to get zonal sum by AMC, by tile. This function is applied each of the 17 tiles in the Brazilian territory. Finally, I aggregated all the 17 zonal statistics by AMC, resulting in the sum of carbon biomass in each zone.
+I wrote two functions in order to open each tile, save the raster, and use the exact_extract algorithm to get zonal sum by AMC, by tile. This function is applied each of the 17 tiles in the Brazilian territory. Finally, I aggregated all the 17 zonal statistics by AMC, resulting in the sum of carbon biomass in each zone.
 
 ## Open shapefile
 
@@ -90,14 +91,13 @@ amc_84 <- st_transform(
   select(-area_amc)
 ```
 
-
-# Zonal sum
+# Download and save the rasters
 
 ```{r}
-biomass <- process_biomass(
+download_biomass(
   api_links = links,
-  zones = amc_84
-)
+  folder_path = "../Biomass"
+  )
 ```
 
 
