@@ -1,13 +1,46 @@
+library(glue)
 library(sf)
 library(terra)
 library(exactextractr)
 library(dplyr)
-library(glue)
 
-process_biomass <- function(api_links, zones) {
+download_biomass <- function(api_links, folder_path) {
   # Check inputs
-  if (!is.list(api_links) || !inherits(zones, "sf")) {
-    stop("Ensure `api_links` is a named list of links, and `zones` is an sf object.")
+  if (!is.list(api_links)) {
+    stop("Ensure `api_links` is a named list of links.")
+  }
+  
+  # Loop through the api_links to download missing rasters
+  for (i in seq_along(api_links)) {
+    raster_name <- paste0(names(api_links)[i], ".tif")
+    output_path <- file.path(folder_path, raster_name)
+    
+    # Check if the file already exists
+    if (!file.exists(output_path)) {
+      message(glue("Downloading {raster_name}..."))
+      
+      # Get the ith raster
+      r <- terra::rast(api_links[[i]])
+      
+      # Save the raster to the specified folder
+      terra::writeRaster(r, filename = output_path, overwrite = TRUE, filetype = "GTiff")
+      message(glue("{raster_name} saved to {folder_path}"))
+      
+      # Clean up
+      rm(r)
+      gc()
+    } else {
+      message(glue("{raster_name} already exists in the folder, skipping download."))
+    }
+  }
+}
+
+###########################################################################
+
+process_biomass <- function(folder_path, zones) {
+  # Check inputs
+  if (!inherits(zones, "sf")) {
+    stop("Ensure `zones` is an sf object.")
   }
   
   # Step 1: Copy zones and convert to dataframe without geometry
@@ -18,13 +51,15 @@ process_biomass <- function(api_links, zones) {
   # Step 2: Initialize an empty list to store x_i columns
   x_columns <- list()
   
-  # Step 3: Loop through the api_links
-  for (i in seq_along(api_links)) {
-    message(glue::glue("Processing raster {i}/{length(api_links)}: {names(api_links)[i]}"))
+  # Step 3: Loop through the rasters in the folder
+  raster_files <- list.files(folder_path, pattern = "\\.tif$", full.names = TRUE)
+  
+  for (i in seq_along(raster_files)) {
+    message(glue("Processing raster {i}/{length(raster_files)}: {basename(raster_files[i])}"))
     
     # Load the ith raster
     message("  Starting terra::rast()...")
-    r <- terra::rast(api_links[[i]])
+    r <- terra::rast(raster_files[i])
     message("  Done with terra::rast().")
     
     # Perform exact_extract with "sum"
@@ -35,16 +70,6 @@ process_biomass <- function(api_links, zones) {
     message("  Done with exact_extract().")
     
     x_columns[[paste0("x_", i)]] <- x_i
-    
-    # Save the raster to a file with maximum compression
-    output_path <- file.path(
-      "../Biomass", 
-      paste0(names(api_links)[i], ".tif")
-    )
-    
-    message("  Starting to save the raster...")
-    terra::writeRaster(r, filename = output_path, overwrite = TRUE, filetype = "GTiff")
-    message("  Done saving the raster.")
     
     # Remove the raster object to save memory
     rm(r)
@@ -61,3 +86,4 @@ process_biomass <- function(api_links, zones) {
   
   return(z)
 }
+
