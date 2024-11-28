@@ -18,10 +18,10 @@ library(tidyr)
 # Geographic
 library(sf)
 library(terra)
+library(exactextractr)
 
 # Personal functions
 source("../Functions/bulk_rds.R")
-source()
 ```
 
 # Importing external files
@@ -34,17 +34,20 @@ bulk_read_rds(
 ```
 
 
-# Idea
+# Opening data
 
-This is a very memory-intensive process. The data is divided in large tiles of satellite imagery. In a shapefile, I have data on the tiles location. 
+This is a very memory-intensive process. The data is divided in large tiles of satellite imagery. In a shape-file, I have data on the tiles location. 
 
-First, I select data on the tiles in Brazil.
-Second, I take the links to the API with pixel level data on each tile.
+*First, I select data on the tiles in Brazil.*
+
+*Second, I take the links to the API with pixel level data on each tile.*
+
 Third, I write a function to open (terra), save as raster, and use the exact_extract algorithm to get the sum on each AMC, save it to a DF and remove the terra raster data from memory.
+
 I then map this function to each of the 15 or 16 tiles of the Brazilian territory.
 Finally, I aggregate the AMC-level DFs and summarise (fun = sum)
 
-# Open shapefile
+## Open shapefile
 
 First, I open the metadata on the tiles, saved in a shapefile, which contains the location and the API link to download the raster.
 
@@ -62,14 +65,41 @@ c_meta <- st_transform(
   )
 ```
 
-# Select region
+## Subset region
 
+Then, I intersect with the shape of the Brazilian territory. In sequence, I extract the links to the API with pixel level data on each tile.
 
 ```{r}
 c_meta_br <- st_intersection(
   c_meta,
   brazil
 )
+
+tiles <- c_meta_br |>
+  as_tibble() |> 
+  select(
+    Mg_px_1_do
+  ) |> 
+  pull()
+```
+
+## Terra
+
+```{r}
+r1 <- rast("https://data-api.globalforestwatch.org/dataset/whrc_aboveground_woody_biomass_stock_2000/v1.4/download/geotiff?grid=10/40000&tile_id=00N_040W&pixel_meaning=Mg_px-1&x-api-key=2d60cd88-8348-4c0f-a6d5-bd9adb585a8c")
+```
+
+```{r}
+x <- exact_extract(
+  r1,
+  amc_1991_2022,
+  fun = "sum",
+  append_cols = "code_amc"
+)
+```
+
+```{r}
+
 ```
 
 
