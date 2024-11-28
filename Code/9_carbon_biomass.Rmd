@@ -110,7 +110,7 @@ Now I calculate the zonal sum by AMC.
 biomass <- process_biomass(
   zones = amc_84,
   folder_path = "../Biomass"
-)
+  )
 ```
 
 
