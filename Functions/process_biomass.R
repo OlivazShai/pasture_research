@@ -1,4 +1,5 @@
 library(glue)
+library(curl)
 library(sf)
 library(terra)
 library(exactextractr)
@@ -19,21 +20,27 @@ download_biomass <- function(api_links, folder_path) {
     if (!file.exists(output_path)) {
       message(glue("Downloading {raster_name}..."))
       
-      # Get the ith raster
-      r <- terra::rast(api_links[[i]])
-      
-      # Save the raster to the specified folder
-      terra::writeRaster(r, filename = output_path, overwrite = TRUE, filetype = "GTiff")
-      message(glue("{raster_name} saved to {folder_path}"))
-      
-      # Clean up
-      rm(r)
-      gc()
+      # Use curl to download the file directly to the folder
+      tryCatch(
+        {
+          # Set up the curl handle
+          h <- curl::new_handle()
+          
+          # Download the file
+          curl::curl_download(api_links[[i]], output_path, handle = h)
+          
+          message(glue("{raster_name} saved to {folder_path}"))
+        },
+        error = function(e) {
+          message(glue("Error downloading raster {raster_name}: {e$message}"))
+        }
+      )
     } else {
       message(glue("{raster_name} already exists in the folder, skipping download."))
     }
   }
 }
+
 
 ###########################################################################
 
