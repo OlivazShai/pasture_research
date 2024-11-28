@@ -14,6 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
 library(readr)
 library(tidyr)
+library(glue)
 
 # Geographic
 library(sf)
@@ -22,6 +23,7 @@ library(exactextractr)
 
 # Personal functions
 source("../Functions/bulk_rds.R")
+source("../Functions/process_biomass.R")
 ```
 
 # Importing external files
@@ -34,18 +36,11 @@ bulk_read_rds(
 ```
 
 
-# Opening data
+# Preparing data
 
-This is a very memory-intensive process. The data is divided in large tiles of satellite imagery. In a shape-file, I have data on the tiles location. 
+This is a very memory-intensive process. The data is divided in large tiles of satellite imagery. In a shape-file, I have data on the tiles location. First, I select data on the tiles in Brazil, and save the links to the API with pixel level data on each tile.
 
-*First, I select data on the tiles in Brazil.*
-
-*Second, I take the links to the API with pixel level data on each tile.*
-
-Third, I write a function to open (terra), save as raster, and use the exact_extract algorithm to get the sum on each AMC, save it to a DF and remove the terra raster data from memory.
-
-I then map this function to each of the 15 or 16 tiles of the Brazilian territory.
-Finally, I aggregate the AMC-level DFs and summarise (fun = sum)
+I wrote a function to open each tile, save the raster, and use the exact_extract algorithm to get zonal sum by AMC, by tile. This function is applied each of the 17 tiles in the Brazilian territory. Finally, I aggregated all the 17 zonal statistics by AMC, resulting in the sum of carbon biomass in each zone.
 
 ## Open shapefile
 
@@ -75,31 +70,35 @@ c_meta_br <- st_intersection(
   brazil
 )
 
-tiles <- c_meta_br |>
-  as_tibble() |> 
-  select(
-    Mg_px_1_do
-  ) |> 
-  pull()
+links <- setNames(
+  # save links as list
+  as.list(c_meta_br$Mg_px_1_do), 
+  # take id as names
+  c_meta_br$tile_id
+  )
 ```
 
-## Terra
+## Align AMC CRS to raster's
+
+Here, I set the CRS of my AMC polygons to the same of the carbon biomass rasters (WGS 84).
 
 ```{r}
-r1 <- rast("https://data-api.globalforestwatch.org/dataset/whrc_aboveground_woody_biomass_stock_2000/v1.4/download/geotiff?grid=10/40000&tile_id=00N_040W&pixel_meaning=Mg_px-1&x-api-key=2d60cd88-8348-4c0f-a6d5-bd9adb585a8c")
-```
-
-```{r}
-x <- exact_extract(
-  r1,
+amc_84 <- st_transform(
   amc_1991_2022,
-  fun = "sum",
-  append_cols = "code_amc"
+  crs = "EPSG:4326"
+  ) |> 
+  select(-area_amc)
+```
+
+
+# Zonal sum
+
+```{r}
+biomass <- process_biomass(
+  api_links = links,
+  zones = amc_84
 )
 ```
 
-```{r}
-
-```
 
 
