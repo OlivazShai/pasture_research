@@ -11,35 +11,37 @@ download_biomass <- function(api_links, folder_path) {
     stop("Ensure `api_links` is a named list of links.")
   }
   
-  # Loop through the api_links to download missing rasters
-  for (i in seq_along(api_links)) {
-    raster_name <- paste0(names(api_links)[i], ".tif")
-    output_path <- file.path(folder_path, raster_name)
-    
-    # Check if the file already exists
-    if (!file.exists(output_path)) {
-      message(glue("Downloading {raster_name}..."))
-      
-      # Use curl to download the file directly to the folder
-      tryCatch(
-        {
-          # Set up the curl handle
-          h <- curl::new_handle()
-          
-          # Download the file
-          curl::curl_download(api_links[[i]], output_path, handle = h)
-          
-          message(glue("{raster_name} saved to {folder_path}"))
-        },
-        error = function(e) {
-          message(glue("Error downloading raster {raster_name}: {e$message}"))
-        }
-      )
-    } else {
-      message(glue("{raster_name} already exists in the folder, skipping download."))
-    }
+  # Convert API links to a character vector and get output file paths
+  download_links <- as.character(api_links)
+  output_paths <- file.path(folder_path, paste0(names(api_links), ".tif"))
+  
+  # Identify files that need to be downloaded
+  missing_links <- download_links[!file.exists(output_paths)]
+  missing_paths <- output_paths[!file.exists(output_paths)]
+  
+  if (length(missing_links) == 0) {
+    message("All files already exist. Nothing to download.")
+    return(invisible(NULL))
+  }
+  
+  message(glue("Downloading {length(missing_links)} files in parallel..."))
+  
+  # Perform parallel download using curl::multi_download
+  results <- curl::multi_download(
+    urls = missing_links,
+    destfiles = missing_paths
+  )
+  
+  # Check for errors
+  failed <- results[results$status_code != 200, ]
+  if (nrow(failed) > 0) {
+    warning(glue("{nrow(failed)} files failed to download. Check the logs."))
+    print(failed)
+  } else {
+    message("All files downloaded successfully.")
   }
 }
+
 
 
 ###########################################################################
