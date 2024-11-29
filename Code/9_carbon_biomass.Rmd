@@ -95,7 +95,7 @@ amc_84 <- st_transform(
 
 Downloads every tile in parallel and saves in drive.
 
-```{r}
+```{r, eval=FALSE}
 download_biomass(
   api_links = links,
   folder_path = "../Biomass"
@@ -113,5 +113,8 @@ biomass <- process_biomass(
   )
 ```
 
+# Export as RDS
 
-
+```{r}
+bulk_write_rds(biomass)
+```
