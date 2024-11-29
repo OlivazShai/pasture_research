@@ -54,7 +54,9 @@ bulk_read_rds(
   # mapbiomas
   land_cover_agg,
   transition_agg,
-  past_qual
+  past_qual,
+  # carbon biomass
+  biomass
   )
 ```
 
@@ -132,7 +134,16 @@ joined_data <- left_join(
   left_join(
     past_qual,
     by = c("code_amc", "year")
-  ) 
+  ) |> 
+  ########### include carbon biomass
+  left_join(
+    biomass,
+    by = "code_amc"
+  ) |> 
+  # calculate carbon density
+  mutate(
+    biomass_density = biomass/area_amc
+  )
 ```
 
 
@@ -151,6 +162,7 @@ iv <- feols(
   + high_share
   + I(pasture/area_amc)
   + year
+  + biomass_density
   | sw(1,main_biome,code_state)
   | local_price + local_price_2 ~ ssiv + ssiv_2,
   panel.id = c("code_amc","year"),
@@ -176,6 +188,7 @@ ols <- feols(
   + high_share
   + I(pasture/area_amc)
   + year
+  + biomass_density
   | sw(1,main_biome,code_state, code_amc),
   panel.id = c("code_amc","year"),
   cluster = "code_amc"
@@ -331,6 +344,7 @@ feols(
   + si_q4_mean
   + high_share
   + year
+  + biomass
   | sw(main_biome, code_state, code_amc),
   cluster = "code_amc"
   ) |>  
@@ -348,6 +362,7 @@ feols(
   + si_q4_mean
   + high_share
   + year
+  + biomass_density
   | sw(main_biome, code_state, code_amc)
   | x2 ~ ssiv + ssiv_2,
   cluster = "code_amc"
@@ -417,7 +432,7 @@ ext_ppm <- cattle_heads_ppm |>
     x2 = 0.45*(cattle_heads/area_amc)**2
   ) |> 
   filter(
-    year > 2006,
+    year > 2001,
     year < 2022
   ) |> 
   mutate(
@@ -429,6 +444,19 @@ ext_ppm <- cattle_heads_ppm |>
   ) |> 
   mutate(
     x3 = 0.45*(cattle_heads/total)**2
+  ) |> 
+  left_join(
+    biomass,
+    by = "code_amc"
+  ) |> 
+  # calculate carbon density
+  mutate(
+    biomass_density = biomass/area_amc
+  ) |> 
+  # this is just a test
+  # probably better to use the same amcs as the int margin
+  filter(
+    x1 != 0
   )
 ```
 
@@ -442,11 +470,13 @@ feols(
   + ma_norm:I(main_biome=="amazonia")
   + high_share
   + year
+  + biomass_density
   | sw(main_biome, code_state, code_amc),
   cluster = "code_amc"
   ) |> 
   etable( fitstat = ~ n + f + f.p + wf + wf.p + r2 + ar2 + wr2)
 ```
+
 ## IV with PPM
 
 ```{r}
@@ -456,7 +486,8 @@ feols(
   + ma_norm
   + ma_norm:I(main_biome=="amazonia")
   + high_share
-  # + year
+  + biomass_density
+  + year
   | sw(main_biome, code_state, code_amc)
   | x2 ~ ssiv,
   cluster = "code_amc"
