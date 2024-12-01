@@ -315,7 +315,7 @@ cattle_heads_census_1995 <- census_1995 |>
 And by AMC.
 
 ```{r}
-shares_by_amc <- left_join(
+shares_by_amc <- right_join(
   cattle_heads_census_1995,
   # get amc data
   muni_to_amc |> 
