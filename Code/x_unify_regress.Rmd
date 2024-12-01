@@ -96,6 +96,10 @@ joined_data <- left_join(
     
     by = c("code_amc", "year")
   ) |>
+  # drop observations without cattle sales
+  filter(
+    ! is.na(av_price_slaughter)
+  ) |> 
   ############ join with inflation
   left_join(
     ipca_census_years,
@@ -107,7 +111,7 @@ joined_data <- left_join(
     local_price = av_price_slaughter * (index_2022/index)
                   *1000,
     
-    # *(index_2022/index)
+    # Deflated using ratio (index_2022/index)
     local_price_2 = av_price_slaughter *(index_2022/index)
                     *(mean_price_2/mean_price)*1000,
   ) |> 
@@ -129,6 +133,14 @@ joined_data <- left_join(
     land_cover_agg,
     
     by = c("code_amc", "year")
+  ) |> 
+  # calculate pasture share
+  mutate(
+    past_share = if_else(is.na(pasture), 0, pasture/area_amc),
+    
+    pasture_2006 = if_else(year == 2006, pasture, lag(pasture)),
+    
+    past_share_2006 = if_else(is.na(pasture_2006), 0, pasture_2006/area_amc)
   ) |> 
   ############ include pasture quality
   left_join(
@@ -156,15 +168,16 @@ iv <- feols(
   data = joined_data,
   cattle_heads_big/area_amc ~
     ma_norm
-  + ma_norm:I(main_biome=="amazonia")
-  + si_mean
-  + si_mean:I(main_biome=="amazonia")
-  + high_share
-  + I(pasture/area_amc)
+  + I(si_mean/10000)
+  + past_share_2006
+  + high_share:main_biome
   + year
   + biomass_density
+  
   | sw(1,main_biome,code_state)
+  
   | local_price + local_price_2 ~ ssiv + ssiv_2,
+  
   panel.id = c("code_amc","year"),
   cluster = "code_amc"
   )
@@ -237,23 +250,7 @@ etable(
 
 ## amazonia
 
-```{r}
-feols(
-  data = joined_data,
-  cattle_heads_big/area_amc ~ 1 |main_biome + code_state| local_price + local_price_2 ~ ssiv + ssiv_2,
-  ) |> 
-  etable()
-```
-
 ## cerrado
-
-```{r}
-feols(
-  data = joined_data |> filter(code_biome == 3),
-  cattle_heads_big ~ 1 | local_price + local_price_2 ~ ssiv + ssiv_2
-  ) |> 
-  etable()
-```
 
 # Diagnostics
 
@@ -288,16 +285,6 @@ iv_model <- ivreg(
 summary(iv_model)
 ```
 
-## FE without IV
-
-```{r}
-feols(
-  data = a,
-  cattle_heads_big ~ local_price + local_price_2 | fe + year
-  ) |> 
-  etable()
-```
-
 # Extensive margin
 
 ```{r}
@@ -323,12 +310,13 @@ ext_data <- transition_agg |>
   mutate(
     y = log(rho_1/(1-rho_1)) - 0.9* log(rho_2),
     
-    x1 = 0.45*(cattle_heads_big**2)/10000000,
+    x1 = 0.45*(cattle_heads_big**2)/10**13,
     
-    x2 = 0.45*(cattle_heads_big/area_amc)**2
-  ) |> 
-  mutate(
-    x3 = 0.45*(cattle_heads/area_amc)**2
+    x2 = 0.45*(cattle_heads_big/area_amc)**2,
+    
+    x3 = 0.45*(cattle_heads_big/pasture)**2,
+    
+    x4 = 0.45*(cattle_heads/area_amc)**2
   )
 ```
 
@@ -338,14 +326,15 @@ ext_data <- transition_agg |>
 ```{r}
 feols(
   data = ext_data,
-  y ~ x2
+  y ~ x4
+  + area_amc
   + ma_norm
   # + (si_q1_mean + si_q2_mean + si_q3_mean)
   + si_q4_mean
-  + high_share
+  + high_share:main_biome
   + year
   + biomass
-  | sw(main_biome, code_state, code_amc),
+  | sw(1,main_biome, code_state, code_amc),
   cluster = "code_amc"
   ) |>  
   etable(fitstat = ~ n + f + f.p + wf + wf.p + r2 + ar2 + wr2)
@@ -363,8 +352,8 @@ feols(
   + high_share
   + year
   + biomass_density
-  | sw(main_biome, code_state, code_amc)
-  | x2 ~ ssiv + ssiv_2,
+  | sw(1, main_biome, code_state, code_amc)
+  | x4 ~ ssiv + ssiv_2,
   cluster = "code_amc"
   ) |>  
   etable(fitstat = ~ n + f + f.p + wf + wf.p)
@@ -404,7 +393,7 @@ ext_ppm <- cattle_heads_ppm |>
     transition_agg |>
       select(
           code_amc,
-          year = year_to,
+          year = year_from,
           rho_1 = natural_pasture
       ) |> 
       mutate(
@@ -420,7 +409,7 @@ ext_ppm <- cattle_heads_ppm |>
       year, code_amc, psi, area_amc, ssiv  
       ) |> 
       mutate(
-        ssiv2 = lead(ssiv),
+        ssiv_lag = lag(ssiv),
         .by = "code_amc"
       )
   ) |> 
@@ -452,12 +441,7 @@ ext_ppm <- cattle_heads_ppm |>
   # calculate carbon density
   mutate(
     biomass_density = biomass/area_amc
-  ) |> 
-  # this is just a test
-  # probably better to use the same amcs as the int margin
-  filter(
-    x1 != 0
-  )
+  ) 
 ```
 
 ## OLS with PPM
@@ -471,7 +455,7 @@ feols(
   + high_share
   + year
   + biomass_density
-  | sw(main_biome, code_state, code_amc),
+  | sw(1, main_biome, code_state, code_amc),
   cluster = "code_amc"
   ) |> 
   etable( fitstat = ~ n + f + f.p + wf + wf.p + r2 + ar2 + wr2)
@@ -488,8 +472,8 @@ feols(
   + high_share
   + biomass_density
   + year
-  | sw(main_biome, code_state, code_amc)
-  | x2 ~ ssiv,
+  | sw(1, main_biome, code_state, code_amc)
+  | x2 ~ ssiv + ssiv_lag,
   cluster = "code_amc"
   ) |> 
   etable(fitstat = ~ n + f + f.p + ivf + ivf.p)
