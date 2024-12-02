@@ -207,6 +207,34 @@ etable(
   fitstat = ~ n + f + ivf)
 ```
 
+Etable with phi:
+
+```{r}
+phi_iv = function(x) {
+  # Extract coefficients
+  coefs <- stats::coef(x)
+  
+  # Calculate phi
+  phi <- - coefs["fit_local_price_2"] / (0.9 * coefs["fit_local_price"]) - 1
+  
+  # Return phi value
+  return(phi)
+}
+
+extralines_register("phi_iv", phi_iv, "phi")
+
+
+etable(
+  iv, 
+  stage = 2, 
+  digits = 4,
+  fitstat = ~ n + f + ivf,
+  extralines = ~ phi_iv
+)
+
+```
+
+
 ## OLS 
 
 ```{r}
@@ -235,6 +263,31 @@ etable(
   digits = 5,
   fitstat = ~ n + f + wf + r2 + wr2 + ar2
   )
+```
+
+
+```{r}
+phi_ols = function(x) {
+  # Extract coefficients
+  coefs <- stats::coef(x)
+  
+  # Calculate phi
+  phi <- - coefs["local_price_2"] / (0.9 * coefs["local_price"]) - 1
+  
+  # Return phi value
+  return(phi)
+}
+
+extralines_register("phi_ols", phi_ols, "phi")
+
+etable(
+  ols, 
+  stage = 2, 
+  digits = 4,
+  fitstat = ~ n + f + wf + r2 + wr2 + ar2,
+  extralines = ~ phi_ols
+)
+
 ```
 
 # Diagnostics (one iv)
@@ -658,6 +711,7 @@ etable(
     stage=2, 
     digits = 4,
     fitstat = ~ n + f + wf + r2 + wr2 + ar2,
+    extralines = ~phi_ols,
     tex = T
     )
 ```
@@ -669,6 +723,7 @@ etable(
     stage = 2,
     digits = 4,
     fitstat = ~ n + f + ivf,
+    extralines = ~phi_iv,
     tex = T
     )
 ```
@@ -736,7 +791,7 @@ map_data <- amc_1991_2022 |>
 ## Prices
 
 ```{r}
-ggplot() +
+map_prices <- ggplot() +
   # Plot non-NA local_price values
   geom_sf(
     data = map_data,
@@ -770,12 +825,15 @@ ggplot() +
     title = "Local Prices by Year in Sample",
     subtitle = "Prices per cattle head in R$ of 2022"
   )
+
+
+ggsave("../Outputs/Graphics/map_prices.pdf", plot = map_prices, device = "pdf", width = 10, height = 6)
 ```
 
 ## Transitions
 
 ```{r}
-ggplot(map_data) +
+map_transitions <- ggplot(map_data) +
   geom_sf(
     data = map_data,
     aes(fill = rho_1, geometry = geom), 
@@ -804,12 +862,14 @@ ggplot(map_data) +
     title = "Transition probabilities",
     subtitle = "Yearly conversion rate from natural vegetation to pasture"
     )
+
+ggsave("../Outputs/Graphics/map_transitions.pdf", plot = map_transitions, device = "pdf", width = 10, height = 6)
 ```
 
 ## Pasture quality
 
 ```{r}
-ggplot(map_data) +
+map_quality <- ggplot(map_data) +
   geom_sf(
     aes(fill = low_share), 
     color = NA
@@ -837,12 +897,14 @@ ggplot(map_data) +
     title = "Pasture quality",
     subtitle = "Share of pastures with low vegetative vigour by year"
     )
+
+ggsave("../Outputs/Graphics/map_quality", plot = map_quality, device = "pdf", width = 10, height = 6)
 ```
 
 ## Biomass density
 
 ```{r}
-map_data |> 
+map_biomass <- map_data |> 
   filter(year == 2017) |>
   ggplot() +
   geom_sf(
@@ -870,6 +932,8 @@ map_data |>
     title = "Aboveground Biomass",
     subtitle = "Density of AGB in CO2-equivalent tons per hectare"
     )
+
+ggsave("../Outputs/Graphics/map_biomass", plot = map_biomass, device = "pdf", width = 8, height = 8)
 ```
 
 
@@ -878,7 +942,7 @@ map_data |>
 ## Cattle heads
 
 ```{r}
-ext_ppm |> 
+plot_ch <- ext_ppm |> 
   summarise(
     ch = sum(cattle_heads),
     .by = c(code_biome, main_biome, year)
@@ -921,6 +985,8 @@ ext_ppm |>
   theme(
     axis.text = element_text(color = "black")
   )
+
+ggsave("../Outputs/Graphics/plot_ch", plot = plot_ch, device = "pdf", width = 10, height = 6)
 ```
 
 ## Pastures
