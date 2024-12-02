@@ -898,7 +898,7 @@ map_quality <- ggplot(map_data) +
     subtitle = "Share of pastures with low vegetative vigour by year"
     )
 
-ggsave("../Outputs/Graphics/map_quality", plot = map_quality, device = "pdf", width = 10, height = 6)
+ggsave("../Outputs/Graphics/map_quality.pdf", plot = map_quality, device = "pdf", width = 10, height = 6)
 ```
 
 ## Biomass density
@@ -933,7 +933,7 @@ map_biomass <- map_data |>
     subtitle = "Density of AGB in CO2-equivalent tons per hectare"
     )
 
-ggsave("../Outputs/Graphics/map_biomass", plot = map_biomass, device = "pdf", width = 8, height = 8)
+ggsave("../Outputs/Graphics/map_biomass.pdf", plot = map_biomass, device = "pdf", width = 8, height = 8)
 ```
 
 
@@ -986,7 +986,7 @@ plot_ch <- ext_ppm |>
     axis.text = element_text(color = "black")
   )
 
-ggsave("../Outputs/Graphics/plot_ch", plot = plot_ch, device = "pdf", width = 10, height = 6)
+ggsave("../Outputs/Graphics/plot_ch.pdf", plot = plot_ch, device = "pdf", width = 10, height = 6)
 ```
 
 ## Pastures
