@@ -41,6 +41,7 @@ bulk_read_rds(
   # geographic
   muni_to_amc,
   amc_1991_2022,
+  brazil,
   # prices
   national_prices,
   cattle_prices_cepea_in_census_years,
@@ -234,37 +235,6 @@ etable(
   digits = 5,
   fitstat = ~ n + f + wf + r2 + wr2 + ar2
   )
-```
-
-
-## Tables
-
-```{r}
-etable(
-    m1,
-    stage = 2,
-    tex = T,
-    fitstat = ~ n + f + ivfall
-    )
-```
-
-
-```{r}
-etable(
-    m2,
-    stage = 2,
-    tex = T,
-    fitstat = ~ n + f + ivfall
-    )
-```
-
-```{r}
-etable(
-    m2,
-    stage = 1,
-    tex = T,
-    fitstat = ~ n + f + ivfall
-    )
 ```
 
 # Diagnostics (one iv)
@@ -497,7 +467,7 @@ ext_ppm <- cattle_heads_ppm |>
 ## OLS with PPM
 
 ```{r}
-feols(
+ppm_ols <- feols(
   data = ext_ppm,
   y ~ x2
   + ma_norm
@@ -507,14 +477,18 @@ feols(
   + area_amc
   | sw(1, main_biome, code_state, code_amc),
   cluster = "code_amc"
-  ) |> 
-  etable( fitstat = ~ n + f + f.p + wf + wf.p + r2 + ar2 + wr2)
+  )
+
+
+etable(
+  ppm_ols,
+  fitstat = ~ n + f + f.p + wf + wf.p + r2 + ar2 + wr2)
 ```
 
 ## IV with PPM
 
 ```{r}
-feols(
+ppm_iv <- feols(
   data = ext_ppm,
   y ~ 1 
   + ma_norm
@@ -525,8 +499,11 @@ feols(
   | sw(1, main_biome, code_state, code_amc)
   | x2 ~ ssiv + ssiv_2,
   cluster = "code_amc"
-  ) |> 
-  etable(fitstat = ~ n + f + f.p + ivf + ivf.p)
+  )
+
+etable(
+  ppm_iv,
+  fitstat = ~ n + f + f.p + ivf + ivf.p)
 ```
 
 # Counterfactuals
@@ -670,6 +647,77 @@ ext_cf |>
   )
 ```
 
+# Tables
+
+## Int
+
+```{r}
+etable(
+    ols,
+    stage=2, 
+    digits = 4,
+    fitstat = ~ n + f + wf + r2 + wr2 + ar2,
+    tex = T
+    )
+```
+
+
+```{r}
+etable(
+    iv,
+    stage = 2,
+    digits = 4,
+    fitstat = ~ n + f + ivf,
+    tex = T
+    )
+```
+
+## Ext
+
+```{r}
+etable(
+    ext_ols,
+    stage=2, 
+    digits = 4,
+    fitstat = ~ n + f + wf + r2 + wr2 + ar2,
+    tex = T
+    )
+```
+
+
+```{r}
+etable(
+    ext_iv,
+    stage = 2,
+    digits = 4,
+    fitstat = ~ n + f + ivf,
+    tex = T
+    )
+```
+
+## PPM
+
+```{r}
+etable(
+    ppm_ols,
+    stage=2, 
+    digits = 4,
+    fitstat = ~ n + f + wf + r2 + wr2 + ar2,
+    tex = T
+    )
+```
+
+
+```{r}
+etable(
+    ppm_iv,
+    stage = 2,
+    digits = 4,
+    fitstat = ~ n + f + ivf,
+    tex = T
+    )
+```
+
 # Maps
 
 ```{r}
@@ -678,12 +726,11 @@ map_data <- amc_1991_2022 |>
   cross_join(
     tribble(~year, 2006, 2017)
   ) |> 
-  left_join(
+  right_join(
     ext_data,
     by = c("code_amc", "year")
   )
 ```
-
 
 ## Prices
 
@@ -691,20 +738,21 @@ map_data <- amc_1991_2022 |>
 ggplot() +
   # Plot non-NA local_price values
   geom_sf(
-    data = filter(map_data, !is.na(local_price)),
+    data = map_data,
     aes(fill = local_price),  # Automatically detects geometry from sf object
     color = NA
   ) +
-  # Add NA regions with striped pattern
+  # Add outline
   geom_sf(
-    data = filter(map_data, is.na(local_price)), 
-    fill = "lightgrey"
+    data = brazil, 
+    color = "lightgrey",
+    fill = NA
   ) +
   # Create facets for different years
   facet_wrap(~ year, ncol = 2) +  
-  # Apply the inferno color scale
+  # Apply the color scale
   scale_fill_viridis_c(
-    option = "inferno",
+    option = "magma",
     direction = -1
   ) + 
   # Adjust themes for cleaner appearance
@@ -727,12 +775,21 @@ ggplot() +
 
 ```{r}
 ggplot(map_data) +
-  geom_sf(aes(fill = rho_1, geometry = geom), color = NA) +
+  geom_sf(
+    data = map_data,
+    aes(fill = rho_1, geometry = geom), 
+    color = NA
+    ) +
   facet_wrap(~ year, ncol = 2) +  
   scale_fill_viridis_c(
     option = "rocket",
     direction = -1
-    ) + 
+    ) +
+  geom_sf(
+    data = brazil, 
+    color = "lightgrey",
+    fill = NA
+    ) +
   theme_minimal() +
   theme(
     panel.grid = element_blank(),
@@ -747,3 +804,174 @@ ggplot(map_data) +
     subtitle = "Yearly conversion rate from natural vegetation to pasture"
     )
 ```
+
+## Pasture quality
+
+```{r}
+ggplot(map_data) +
+  geom_sf(
+    aes(fill = low_share), 
+    color = NA
+    ) +
+  facet_wrap(~ year, ncol = 2) +  
+  scale_fill_viridis_c(
+    option = "rocket",
+    direction = -1
+    ) +
+  geom_sf(
+    data = brazil, 
+    color = "lightgrey",
+    fill = NA
+    ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    legend.key.width = unit(0.2, "cm"),
+    legend.title = element_blank()
+    ) +
+  labs(
+    title = "Pasture quality",
+    subtitle = "Share of pastures with low vegetative vigour by year"
+    )
+```
+
+## Biomass density
+
+```{r}
+map_data |> 
+  filter(year == 2017) |>
+  ggplot() +
+  geom_sf(
+    aes(fill = biomass_density), 
+    color = NA
+    ) +  
+  scale_fill_viridis_c(
+    direction = -1
+    ) +
+  geom_sf(
+    data = brazil, 
+    color = "lightgrey",
+    fill = NA
+    ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    legend.key.width = unit(0.2, "cm"),
+    legend.title = element_blank()
+    ) +
+  labs(
+    title = "Aboveground Biomass",
+    subtitle = "Density of AGB in CO2-equivalent tons per hectare"
+    )
+```
+
+
+# Plots
+
+## Cattle heads
+
+```{r}
+ext_ppm |> 
+  summarise(
+    ch = sum(cattle_heads),
+    .by = c(code_biome, main_biome, year)
+  ) |> 
+  mutate(
+    Bioma = case_when(
+      code_biome == 1 ~ "Amazônia",
+      code_biome == 2 ~ "Caatinga",
+      code_biome == 3 ~ "Cerrado",
+      code_biome == 4 ~ "Mata Atlântica",
+      code_biome == 5 ~ "Pampa",
+      code_biome == 6 ~ "Pantanal")
+  ) |> 
+  ggplot() +
+  # Line plot with color by biome
+  geom_line(
+    aes(x = year, y = ch, color = Bioma),
+    size = 1
+  ) +
+  scale_color_manual(
+    values = c(
+      "Amazônia" = "#1b9e77", 
+      "Caatinga" = "#ffbb78",
+      "Cerrado" = "#d95f02",
+      "Mata Antlântica" = "#66b3ff",
+      "Pampa" = "#d62728",
+      "Pantanal" = "#9467bd"
+      ),
+    name = "Main Biome"
+  ) +
+  # Labels and titles
+  labs(
+    title = "Cattle Heads Over Time by Main Biome",
+    subtitle = "Regional distribution of cattle heads from 2000 to 2022",
+    x = "Year",
+    y = "Cattle Heads"
+  ) +
+  # Improved theme
+  theme_minimal() +
+  theme(
+    axis.text = element_text(color = "black")
+  )
+```
+
+## Pastures
+
+```{r}
+land_cover_agg |> 
+  left_join(
+    select(agg_census_data, c(code_amc, code_biome, main_biome)),
+    by = "code_amc"
+  ) |> 
+  summarise(
+    pasture = sum(pasture, na.rm = T),
+    .by = c(code_biome, main_biome, year)
+  ) |> 
+  mutate(
+    Bioma = case_when(
+      code_biome == 1 ~ "Amazônia",
+      code_biome == 2 ~ "Caatinga",
+      code_biome == 3 ~ "Cerrado",
+      code_biome == 4 ~ "Mata Atlântica",
+      code_biome == 5 ~ "Pampa",
+      code_biome == 6 ~ "Pantanal")
+  ) |> 
+  ggplot() +
+  # Line plot with color by biome
+  geom_line(
+    aes(x = year, y = pasture, color = Bioma),
+    size = 1
+  ) +
+  scale_color_manual(
+    values = c(
+      "Amazônia" = "#1b9e77", 
+      "Caatinga" = "#ffbb78",
+      "Cerrado" = "#d95f02",
+      "Mata Antlântica" = "#66b3ff",
+      "Pampa" = "#d62728",
+      "Pantanal" = "#9467bd"
+      ),
+    name = "Main Biome"
+  ) +
+  # Labels and titles
+  labs(
+    title = "Pasture area Over Time by Main Biome",
+    subtitle = "Regional distribution of pastures from 2001 to 2020",
+    x = "Year",
+    y = "Pasture area (ha)"
+  ) +
+  # Improved theme
+  theme_minimal() +
+  theme(
+    axis.text = element_text(color = "black")
+  )
+```
+
+
