@@ -20,6 +20,7 @@ library(forcats)
 
 # Graphics
 library(ggplot2)
+library(ggpattern)
 
 # Geographic
 library(sf)
@@ -39,6 +40,7 @@ source("../Functions/bulk_rds.R")
 bulk_read_rds(
   # geographic
   muni_to_amc,
+  amc_1991_2022,
   # prices
   national_prices,
   cattle_prices_cepea_in_census_years,
@@ -668,8 +670,80 @@ ext_cf |>
   )
 ```
 
-# Descriptive statistics
+# Maps
+
+```{r}
+map_data <- amc_1991_2022 |> 
+  select(-area_amc) |> 
+  cross_join(
+    tribble(~year, 2006, 2017)
+  ) |> 
+  left_join(
+    ext_data,
+    by = c("code_amc", "year")
+  )
+```
 
 
+## Prices
 
+```{r}
+ggplot() +
+  # Plot non-NA local_price values
+  geom_sf(
+    data = filter(map_data, !is.na(local_price)),
+    aes(fill = local_price),  # Automatically detects geometry from sf object
+    color = NA
+  ) +
+  # Add NA regions with striped pattern
+  geom_sf(
+    data = filter(map_data, is.na(local_price)), 
+    fill = "lightgrey"
+  ) +
+  # Create facets for different years
+  facet_wrap(~ year, ncol = 2) +  
+  # Apply the inferno color scale
+  scale_fill_viridis_c(
+    option = "inferno",
+    direction = -1
+  ) + 
+  # Adjust themes for cleaner appearance
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    legend.key.width = unit(0.2, "cm"),
+    legend.title = element_blank()
+  ) +
+  labs(
+    title = "Local Prices by Year in Sample",
+    subtitle = "Prices per cattle head in R$ of 2022"
+  )
+```
 
+## Transitions
+
+```{r}
+ggplot(map_data) +
+  geom_sf(aes(fill = rho_1, geometry = geom), color = NA) +
+  facet_wrap(~ year, ncol = 2) +  
+  scale_fill_viridis_c(
+    option = "rocket",
+    direction = -1
+    ) + 
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    legend.key.width = unit(0.2, "cm"),
+    legend.title = element_blank()
+    ) +
+  labs(
+    title = "Transition probabilities",
+    subtitle = "Yearly conversion rate from natural vegetation to pasture"
+    )
+```
