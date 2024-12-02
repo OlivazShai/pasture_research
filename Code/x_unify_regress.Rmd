@@ -189,7 +189,7 @@ iv <- feols(
   + area_amc
   + year
   
-  | sw(1,main_biome,code_state, code_amc)
+  | sw(1,main_biome, code_state, code_amc)
   
   | local_price + local_price_2 ~ ssiv + ssiv_2,
   
@@ -349,7 +349,7 @@ ext_data <- transition_agg |>
 ## OLS with Census
 
 ```{r}
-feols(
+ext_ols <- feols(
   data = ext_data,
   y ~ x2
   
@@ -363,14 +363,17 @@ feols(
   
   | sw(1,main_biome, code_state, code_amc),
   cluster = "code_amc"
-  ) |>  
-  etable(fitstat = ~ n + f + f.p + wf + wf.p + r2 + ar2 + wr2)
+  )
+
+etable(
+  ext_ols,
+  fitstat = ~ n + f + f.p + wf + wf.p + r2 + ar2 + wr2)
 ```
 
 ## IV with census
 
 ```{r}
-feols(
+ext_iv <- feols(
   data = ext_data,
   y ~ 
     ma_norm
@@ -383,8 +386,12 @@ feols(
   | sw(1, main_biome, code_state, code_amc)
   | x2 ~ ssiv + ssiv_2,
   cluster = "code_amc"
-  ) |>  
-  etable(fitstat = ~ n + f + ivf)
+  ) 
+
+etable(
+  ext_iv,
+  fitstat = ~ n + f + ivf
+  )
 ```
 
 # PPM version
@@ -526,11 +533,142 @@ To calculate a counterfactual, I'll choose a pair of models of each margin. Then
 
 I calculate the ext margin model for the predicted headcount and for the counterfactual. Probability for the following year remains the same because it is forward looking.
 
+## Intensive margin 
+
 ```{r}
+######### IV model with State FE
 int_mod <- iv[[3]]
 
-cf_
+########## Counterfactual data
+
+# increase 10% prices
+p_change = 0.1
+
+int_cf_data_p <- int_data |> 
+  mutate(
+    local_price = local_price * (1+p_change),
+    local_price_2 = local_price_2 * (1+p_change)
+    )
+
+# reduce degradation in 10%
+deg_change = 0.9
+
+int_cf_data_deg <- int_data |> 
+  mutate(
+    low_share = low_share * (1 - deg_change),
+    mid_share = mid_share * (1 - deg_change)
+  )
+
+# join counterfactuals with dataframe 
+int_cf <- int_data |> 
+  mutate(
+    h_hat = predict(int_mod),
+    
+    h_p = predict(int_mod, newdata = int_cf_data_p),
+    
+    h_deg = predict(int_mod, newdata = int_cf_data_deg)
+  )
+
+######### summarise variations
+int_cf |> 
+  mutate(
+    H = cattle_heads_big,
+    H_hat = h_hat*area_amc,
+    H_p = h_p*area_amc,
+    H_deg = h_deg*area_amc
+  ) |> 
+  summarise(
+    real = sum(H),
+    expected = sum(H_hat),
+    cf_p = sum(H_p),
+    elast_p = (cf_p - expected)/expected * (1/p_change),
+    cf_deg = sum(H_deg),
+    var_deg = (cf_deg - expected)/expected * (1/deg_change)
+  )
 ```
+
+## Extensive Margin
+
+```{r}
+ext_mod <- ext_ols[[3]]
+
+########## Counterfactual data
+
+# estimated
+ext_cf_data_hat <- ext_data |> 
+  left_join(
+    x |> select(code_amc, year, h_hat, h_p, h_deg),
+    
+    by = c("code_amc", "year")
+  ) |> 
+  mutate(
+    x2 = 0.45*(h_hat)**2
+  )
+
+# price change
+ext_cf_data_p <- ext_data |> 
+  left_join(
+    x |> select(code_amc, year, h_hat, h_p, h_deg),
+    
+    by = c("code_amc", "year")
+  ) |> 
+  mutate(
+    x2 = 0.45*(h_p)**2
+  )
+
+# degradation
+ext_cf_data_deg <- ext_data |> 
+  left_join(
+    x |> select(code_amc, year, h_hat, h_p, h_deg),
+    
+    by = c("code_amc", "year")
+  ) |> 
+  mutate(
+    x2 = 0.45*(h_deg)**2,
+    low_share = low_share * (1 - deg_change),
+    mid_share = mid_share * (1 - deg_change)
+  )
+
+# join counterfactuals with dataframe 
+ext_cf <- ext_data |> 
+  mutate(
+    y_hat = predict(ext_mod, newdata = ext_cf_data_hat),
+    
+    y_p = predict(ext_mod, newdata = ext_cf_data_p),
+    
+    y_deg = predict(ext_mod, newdata = ext_cf_data_deg)
+  )
+
+########## calculate new probabilities
+
+logit = \(x) exp(x)/(1+exp(x))
+
+ext_cf |> 
+  mutate(
+    rho_hat = logit(
+      y_hat + 0.9*log(rho_2) - 0.9*gamma
+      ),
+    
+    rho_p = logit(
+      y_p + 0.9*log(rho_2) - 0.9*gamma
+      ),
+    
+    rho_deg = logit(
+      y_deg + 0.9*log(rho_2) - 0.9*gamma
+      )
+  ) |> 
+  summarise(
+    # .by = "main_biome",
+    real = sum(rho_1*natural),
+    expected = sum(rho_hat*natural),
+    cf_p = sum(rho_p*natural),
+    elast_p = (cf_p - expected)/expected * (1/p_change),
+    cf_deg = sum(rho_deg*natural),
+    var_deg = (cf_p - expected)/expected * (1/(-deg_change))
+  )
+```
+
+# Descriptive statistics
 
 
 
