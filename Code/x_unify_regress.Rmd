@@ -602,7 +602,7 @@ int_cf <- int_data |>
   )
 
 ######### summarise variations
-int_cf |> 
+int_cf_biome <- int_cf |> 
   mutate(
     H = cattle_heads_big,
     H_hat = h_hat*area_amc,
@@ -610,14 +610,43 @@ int_cf |>
     H_deg = h_deg*area_amc
   ) |> 
   summarise(
-    # .by = "main_biome",
+    .by = "main_biome",
     real = sum(H),
     expected = sum(H_hat),
     cf_p = sum(H_p),
     elast_p = (cf_p - expected)/expected * (1/p_change),
     cf_deg = sum(H_deg),
-    var_deg = (cf_deg - expected)/expected * (-1/deg_change)
+    elast_deg = (cf_deg - expected)/expected * (-1/deg_change)
   )
+
+int_cf_total <- int_cf |> 
+  mutate(
+    H = cattle_heads_big,
+    H_hat = h_hat*area_amc,
+    H_p = h_p*area_amc,
+    H_deg = h_deg*area_amc
+  ) |> 
+  summarise(
+    main_biome = "Total",
+    real = sum(H),
+    expected = sum(H_hat),
+    cf_p = sum(H_p),
+    elast_p = (cf_p - expected)/expected * (1/p_change),
+    cf_deg = sum(H_deg),
+    elast_deg = (cf_deg - expected)/expected * (-1/deg_change)
+  )
+
+int_cf_latex <- bind_rows(
+  int_cf_biome,
+  int_cf_total
+  ) |> 
+  knitr::kable(
+    digits = 3,
+    caption = "Intensive margin counterfactuals",
+    format = "latex"
+  )
+
+cat(int_cf_latex)
 ```
 
 ## Extensive Margin
@@ -676,7 +705,7 @@ ext_cf <- ext_data |>
 
 logit = \(x) exp(x)/(1+exp(x))
 
-ext_cf |> 
+ext_cf_biome <- ext_cf |> 
   mutate(
     rho_hat = logit(
       y_hat + 0.9*log(rho_2) - 0.9*gamma
@@ -691,14 +720,51 @@ ext_cf |>
       )
   ) |> 
   summarise(
-    #.by = "main_biome",
+    .by = "main_biome",
     real = sum(rho_1*natural),
     expected = sum(rho_hat*natural),
     cf_p = sum(rho_p*natural),
     elast_p = (cf_p - expected)/expected * (1/p_change),
     cf_deg = sum(rho_deg*natural),
-    var_deg = (cf_p - expected)/expected * (-1/deg_change)
+    elast_deg = (cf_p - expected)/expected * (-1/deg_change)
   )
+
+ext_cf_total <- ext_cf |> 
+  mutate(
+    rho_hat = logit(
+      y_hat + 0.9*log(rho_2) - 0.9*gamma
+      ),
+    
+    rho_p = logit(
+      y_p + 0.9*log(rho_2) - 0.9*gamma
+      ),
+    
+    rho_deg = logit(
+      y_deg + 0.9*log(rho_2) - 0.9*gamma
+      )
+  ) |> 
+  summarise(
+    main_biome = "Total",
+    real = sum(rho_1*natural),
+    expected = sum(rho_hat*natural),
+    cf_p = sum(rho_p*natural),
+    elast_p = (cf_p - expected)/expected * (1/p_change),
+    cf_deg = sum(rho_deg*natural),
+    elast_deg = (cf_p - expected)/expected * (-1/deg_change)
+  )
+
+ext_cf_latex <- bind_rows(
+  ext_cf_biome,
+  ext_cf_total
+  ) |> 
+  knitr::kable(
+    digits = 3,
+    caption = "Extensive margin counterfactuals",
+    format = "latex"
+  )
+
+cat(ext_cf_latex)
+
 ```
 
 # Tables
