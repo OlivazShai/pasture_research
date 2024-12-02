@@ -557,12 +557,13 @@ int_cf |>
     H_deg = h_deg*area_amc
   ) |> 
   summarise(
+    # .by = "main_biome",
     real = sum(H),
     expected = sum(H_hat),
     cf_p = sum(H_p),
     elast_p = (cf_p - expected)/expected * (1/p_change),
     cf_deg = sum(H_deg),
-    var_deg = (cf_deg - expected)/expected * (1/deg_change)
+    var_deg = (cf_deg - expected)/expected * (-1/deg_change)
   )
 ```
 
@@ -637,13 +638,13 @@ ext_cf |>
       )
   ) |> 
   summarise(
-    # .by = "main_biome",
+    #.by = "main_biome",
     real = sum(rho_1*natural),
     expected = sum(rho_hat*natural),
     cf_p = sum(rho_p*natural),
     elast_p = (cf_p - expected)/expected * (1/p_change),
     cf_deg = sum(rho_deg*natural),
-    var_deg = (cf_p - expected)/expected * (1/(-deg_change))
+    var_deg = (cf_p - expected)/expected * (-1/deg_change)
   )
 ```
 
