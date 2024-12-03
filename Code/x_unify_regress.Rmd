@@ -659,7 +659,7 @@ ext_mod <- ext_ols[[3]]
 # estimated
 ext_cf_data_hat <- ext_data |> 
   left_join(
-    x |> select(code_amc, year, h_hat, h_p, h_deg),
+    int_cf |> select(code_amc, year, h_hat, h_p, h_deg),
     
     by = c("code_amc", "year")
   ) |> 
@@ -670,7 +670,7 @@ ext_cf_data_hat <- ext_data |>
 # price change
 ext_cf_data_p <- ext_data |> 
   left_join(
-    x |> select(code_amc, year, h_hat, h_p, h_deg),
+    int_cf |> select(code_amc, year, h_hat, h_p, h_deg),
     
     by = c("code_amc", "year")
   ) |> 
@@ -681,7 +681,7 @@ ext_cf_data_p <- ext_data |>
 # degradation
 ext_cf_data_deg <- ext_data |> 
   left_join(
-    x |> select(code_amc, year, h_hat, h_p, h_deg),
+    int_cf |> select(code_amc, year, h_hat, h_p, h_deg),
     
     by = c("code_amc", "year")
   ) |> 
@@ -778,7 +778,9 @@ etable(
     digits = 4,
     fitstat = ~ n + f + wf + r2 + wr2 + ar2,
     extralines = ~phi_ols,
-    tex = T
+    tex = T,
+    drop = c("ma_norm", "^si", "area_amc", "past_share", "biomass"),
+    style.tex = style.tex("aer")
     )
 ```
 
@@ -790,7 +792,9 @@ etable(
     digits = 4,
     fitstat = ~ n + f + ivf,
     extralines = ~phi_iv,
-    tex = T
+    tex = T,
+    drop = c("ma_norm", "^si", "area_amc", "past_share", "biomass"),
+    style.tex = style.tex("aer")
     )
 ```
 
@@ -802,7 +806,9 @@ etable(
     stage=2, 
     digits = 4,
     fitstat = ~ n + f + wf + r2 + wr2 + ar2,
-    tex = T
+    tex = T,
+    drop = c("ma_norm", "^si", "area_amc", "past_share"),
+    style.tex = style.tex("aer")
     )
 ```
 
@@ -813,7 +819,9 @@ etable(
     stage = 2,
     digits = 4,
     fitstat = ~ n + f + ivf,
-    tex = T
+    tex = T,
+    drop = c("ma_norm", "^si", "area_amc", "past_share"),
+    style.tex = style.tex("aer")
     )
 ```
 
@@ -825,7 +833,9 @@ etable(
     stage=2, 
     digits = 4,
     fitstat = ~ n + f + wf + r2 + wr2 + ar2,
-    tex = T
+    tex = T,
+    drop = c("ma_norm", "^si", "area_amc", "past_share"),
+    style.tex = style.tex("aer")
     )
 ```
 
@@ -836,7 +846,9 @@ etable(
     stage = 2,
     digits = 4,
     fitstat = ~ n + f + ivf,
-    tex = T
+    tex = T,
+    drop = c("ma_norm", "^si", "area_amc", "past_share"),
+    style.tex = style.tex("aer")
     )
 ```
 
