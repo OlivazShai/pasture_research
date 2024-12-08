@@ -475,7 +475,7 @@ muni_to_amc <- left_join(
   select(-geom)
 ```
 
-## Generate RDSs
+# Generate RDSs
 
 ```{r}
 bulk_write_rds(
@@ -492,3 +492,17 @@ bulk_write_rds(
   main_biome_amc
   )
 ```
+
+# Export shapefile
+
+I will export the AMCs shapefile for use in Python.
+
+```{r}
+st_write(
+  amc_1991_2022,
+  "../Variables/amc_1991_2022/amc_1991_2022.shp",
+  delete_dsn = T
+)
+```
+
+
