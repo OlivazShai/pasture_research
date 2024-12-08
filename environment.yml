@@ -11,5 +11,6 @@ dependencies:
   - shapely
   - tqdm
   - pip
+  - geemap
   - pip:
       - earthengine-api
