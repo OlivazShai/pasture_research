@@ -495,11 +495,19 @@ bulk_write_rds(
 
 # Export shapefile
 
-I will export the AMCs shapefile for use in Python.
+I will export the AMCs shapefile for use in Python. First, I will reproject to WGS 84. 
+
+```{r}
+amc_py <- st_transform(
+  amc_1991_2022,
+  crs = "EPSG:4326"
+)
+```
+
 
 ```{r}
 st_write(
-  amc_1991_2022,
+  amc_py,
   "../Variables/amc_1991_2022/amc_1991_2022.shp",
   delete_dsn = T
 )
