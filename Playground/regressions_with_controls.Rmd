@@ -1,0 +1,1150 @@
+---
+title: "Data Unification"
+author: "Shai Vaz"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+# Data Wrangling
+library(dplyr)
+library(readr)
+library(tidyr)
+library(stringr)
+library(readxl)
+library(forcats)
+
+# Graphics
+library(ggplot2)
+library(ggpattern)
+
+# Geographic
+library(sf)
+
+# Econometrics
+library(fixest)
+library(ivreg)
+library(stats)
+
+# Personal functions
+source("../Functions/bulk_rds.R")
+```
+
+# Importing files
+
+```{r}
+bulk_read_rds(
+  # geographic
+  muni_to_amc,
+  amc_1991_2022,
+  brazil,
+  # prices
+  national_prices,
+  cattle_prices_cepea_in_census_years,
+  ipca_census_years,
+  # census data
+  agg_census_data,
+  # survey data
+  cattle_heads_ppm,
+  # instruments
+  ssiv,
+  # controls
+  tc_by_amc,
+  ma_long,
+  si_by_amc,
+  # mapbiomas
+  land_cover_agg,
+  transition_agg,
+  past_qual,
+  # carbon biomass
+  biomass
+  )
+```
+
+Read terraclimate climatic controls. 
+
+```{r}
+terraclimate <- read_csv(
+  "../Variables/terraclimate.csv", 
+  col_types = "cnnnnnnnn")
+```
+
+# Joining database
+
+```{r}
+int_data <- left_join(
+  # first I join shifters with prices
+  # then I extract data from t+1
+  ssiv |> 
+    select(code_amc, year, area_amc, ssiv),
+  
+  cattle_prices_cepea_in_census_years,
+  
+  by = c("year" = "census_year")
+  ) |> 
+  ########## get next period prices and shifters
+  mutate(
+    mean_price_2 = if_else(
+      year == 2006 | year == 2017,
+      lead(mean_price),
+      NA),
+    
+    mean_nominal_price_2 = if_else(
+      year == 2006 | year == 2017,
+      lead(mean_nominal_price),
+      NA),
+    
+    ssiv_2 = if_else(
+      year == 2006 | year == 2017,
+      lead(ssiv),
+      NA)
+  ) |>
+  ############ join with census data
+  right_join(
+    agg_census_data,
+    
+    by = c("code_amc", "year")
+  ) |>
+    # drop observations without cattle sales
+  filter(
+    ! is.na(av_price_slaughter)
+  ) |> 
+    # calculate normalized head count (intensity)
+  mutate(
+    h = cattle_heads_big/area_amc
+  ) |> 
+  ############ join with inflation
+  left_join(
+    ipca_census_years,
+    
+    by = c("year" = "census_year")
+  ) |> 
+  ############ deflate and project ahead local prices
+             # using IPCA ratio (index_2022/index)
+  mutate(
+    local_price = av_price_slaughter * (index_2022/index)
+                  *1000,
+    
+    local_price_2 = av_price_slaughter *(index_2022/index)
+                    *(mean_price_2/mean_price)*1000,
+  ) |> 
+  ############# include controls
+  left_join(
+    tc_by_amc,
+    by = "code_amc"
+  ) |> 
+  left_join(
+    ma_long,
+    by = c("code_amc", "year")
+  ) |> 
+  left_join(
+    si_by_amc,
+    by = "code_amc"
+  ) |> 
+  ############ include land use
+  left_join(
+    land_cover_agg,
+    
+    by = c("code_amc", "year")
+  ) |> 
+              # calculate pasture share (in t and only in 2006)
+  mutate(
+    past_share = if_else(is.na(pasture), 0, pasture/area_amc),
+    
+    pasture_2006 = if_else(year == 2006, pasture, lag(pasture)),
+    
+    past_share_2006 = if_else(is.na(pasture_2006), 0, pasture_2006/area_amc)
+  ) |> 
+  ############ include pasture quality
+  left_join(
+    past_qual,
+    by = c("code_amc", "year")
+  ) |>
+            # filter out one NA on total pastures
+            # only case is Afuá-PA (in Marajó island)
+  filter(
+    ! is.na(total)
+  ) |> 
+  ########### include carbon biomass
+  left_join(
+    biomass,
+    by = "code_amc"
+  ) |> 
+            # calculate carbon density in CO2
+            # uses atomic weight of C (12) and CO2 (44)
+            # and the fact that biomass is about 50% C
+  mutate(
+    biomass_co2 = (biomass/2)*(44/12),
+    biomass_density = biomass_co2/area_amc
+  ) |> 
+  ############ terreclimate controls
+  left_join(
+    terraclimate,
+    
+    by = c("code_amc", "year")
+  )
+```
+
+
+# Intensive margin
+
+## IV 
+
+```{r}
+iv <- feols(
+  data = int_data,
+  h ~
+    ma_norm
+  + si_median
+  + high_share
+  + past_share_2006
+  + area_amc
+  + year
+  + tmmn_min
+  + tmmx_max + pr
+  
+  | sw(1,main_biome, code_state)
+  
+  | local_price + local_price_2 ~ ssiv + ssiv_2,
+  
+  panel.id = c("code_amc","year"),
+  cluster = "code_amc"
+  )
+
+etable(
+  iv, 
+  stage=2, 
+  digits = 4,
+  fitstat = ~ n + f + ivf)
+```
+
+Etable with phi:
+
+```{r}
+phi_iv = function(x) {
+  # Extract coefficients
+  coefs <- stats::coef(x)
+  
+  # Calculate phi
+  phi <- - coefs["fit_local_price_2"] / (0.9 * coefs["fit_local_price"]) - 1
+  
+  # Return phi value
+  return(phi)
+}
+
+extralines_register("phi_iv", phi_iv, "phi")
+
+
+etable(
+  iv, 
+  stage = 2, 
+  digits = 4,
+  fitstat = ~ n + f + ivf,
+  extralines = ~ phi_iv
+)
+
+```
+
+
+## OLS 
+
+```{r}
+ols <- feols(
+  data = int_data,
+  h ~
+    local_price
+  + local_price_2
+  
+  + ma_norm
+  + si_mean
+  + past_share_2006
+  + biomass_density
+  + area_amc
+  + year
+  + tmmn_min
+  + tmmx_max + high_share
+  
+  | sw(1,main_biome,code_state, code_amc),
+  panel.id = c("code_amc","year"),
+  cluster = "code_amc"
+  )
+
+etable(
+  ols, 
+  stage=2, 
+  digits = 5,
+  fitstat = ~ n + f + ivf
+  )
+```
+
+
+```{r}
+phi_ols = function(x) {
+  # Extract coefficients
+  coefs <- stats::coef(x)
+  
+  # Calculate phi
+  phi <- ( - coefs["local_price_2"] ) / (0.9 * coefs["local_price"]) - 1
+  
+  # Return phi value
+  return(phi)
+}
+
+extralines_register("phi_ols", phi_ols, "phi")
+
+etable(
+  ols, 
+  stage = 2, 
+  digits = 4,
+  fitstat = ~ n + f + wf + r2 + wr2 + ar2,
+  extralines = ~ phi_ols
+)
+
+```
+
+# Diagnostics (one iv)
+
+```{r, eval=FALSE}
+a <- joined_data |> 
+  mutate(
+    fe = as_factor(code_amc),
+    fe_2 = as_factor(main_biome)
+  ) |> 
+  drop_na() |> 
+  filter(
+    cattle_heads_big != 0
+  )
+```
+
+```{r, eval=FALSE}
+first_stage1 <- lm(local_price ~ ssiv, data = a)
+first_stage2 <- lm(local_price_2 ~ ssiv_2, data = a)
+
+# Extract predicted values
+a$local_price_hat <- predict(first_stage1)
+a$local_price_2_hat <- predict(first_stage2)
+```
+
+```{r, eval=FALSE}
+iv_model <- ivreg(
+  cattle_heads_big ~ local_price_hat + local_price_2_hat:fe_2 + fe_2, 
+  data = a
+)
+
+
+summary(iv_model)
+```
+
+# Extensive margin
+
+Import Euler-Mascheroni constant:
+
+```{r}
+gamma = -digamma(1)
+```
+
+Now, I join the transition probabilities with my intensive margin data and calculate the new regression variables. 
+
+```{r}
+ext_data <- transition_agg |> 
+  ############# get transition probabilities
+  select(
+    code_amc,
+    year = year_from,
+    rho_1 = natural_pasture
+  ) |> 
+  mutate(
+    rho_2 = lead(rho_1),
+    .by = code_amc
+  ) |> 
+  ############# join with intensive margin data
+  right_join(
+    int_data,
+    by = c("code_amc", "year")
+  ) |>
+  ############# remove probability 0 and 1 (impossible log odds)
+  filter(
+    rho_1 != 0 &
+    rho_1 != 1 &
+    rho_2 != 0 
+  ) |> 
+  ############# calculate regression variables 
+  mutate(
+    y = log(rho_1/(1-rho_1)) - 0.9* log(rho_2) + 0.9*gamma,
+    
+    x1 = 0.45*(cattle_heads_big**2)/10**13,
+    
+    x2 = 0.45*(h)**2,
+    
+    x3 = 0.45*(cattle_heads_big/pasture)**2,
+    
+    x4 = 0.45*(cattle_heads/area_amc)**2
+  )
+```
+
+
+## OLS with Census
+
+```{r}
+ext_ols <- feols(
+  data = ext_data,
+  y ~ x2
+  
+  + ma_norm
+  + si_median + si_q1_mean + si_q4_mean
+  + high_share
+  + past_share_2006
+  + biomass_density
+  + area_amc
+  + year 
+  + tmmn_min + tmmx_max + pr
+  
+  | sw(1,main_biome, code_state, code_amc),
+  cluster = "code_amc"
+  )
+
+etable(
+  ext_ols,
+  fitstat = ~ n + f + f.p + wf + wf.p + r2 + ar2 + wr2)
+```
+
+## IV with census
+
+```{r}
+ext_iv <- feols(
+  data = ext_data,
+  y ~ 
+    ma_norm
+  + si_median
+  + high_share
+  + biomass_density
+  + area_amc
+  + year
+  + tmmn_min + tmmx_max + pr
+  
+  | sw(1, main_biome, code_state, code_amc)
+  | x2 ~ ssiv + ssiv_2,
+  cluster = "code_amc"
+  ) 
+
+etable(
+  ext_iv,
+  fitstat = ~ n + f + ivf
+  )
+```
+
+# PPM version
+
+
+```{r}
+ext_ppm <- cattle_heads_ppm |> 
+  ########### get PPM data
+  left_join(
+    muni_to_amc |> select(-name_muni),
+    by = join_by(code_muni)
+  ) |> 
+  ########### aggregate by AMC
+  summarise(
+    .by = c("code_amc", "year"),
+    
+    cattle_heads = sum(cattle_heads, na.rm = TRUE),
+    main_biome = unique(main_biome),
+    code_biome = unique(code_biome)
+  ) |> 
+  ########### join with market access for 2000
+  left_join(
+    ma_long |> 
+      filter(year_ma == 2000) |> 
+      select(-year_ma, -year),
+    
+    by = "code_amc"
+  ) |> 
+  mutate(
+    year = as.numeric(year)
+  ) |> 
+  ############# join with transition probabilities
+  left_join(
+    by = join_by("code_amc", "year"), 
+    
+    transition_agg |>
+      select(
+          code_amc,
+          year = year_from,
+          rho_1 = natural_pasture
+      ) |> 
+      mutate(
+        rho_2 = lead(rho_1),
+        .by = code_amc)
+  ) |> 
+  ############ join with shift share 
+  left_join(
+    by = c("code_amc", "year"),
+    
+    ssiv |> 
+      select(
+      year, code_amc, psi, area_amc, ssiv  
+      ) |> 
+      mutate(
+        ssiv_2 = lead(ssiv),
+        ssiv_lag = lag(ssiv),
+        .by = "code_amc"
+      )
+  ) |> 
+  ########## filter for years and probabilities without NA
+  filter(
+    year > 2001,
+    year < 2021,
+    
+    rho_1 != 0,
+    rho_1 != 1,
+    rho_2 != 0
+  ) |> 
+  ########## join with pasture quality
+  left_join(
+    past_qual,
+    by = c("code_amc", "year")
+  ) |> 
+  filter(
+    !is.na(total)
+  ) |> 
+  ########## calculate regression variables
+  mutate(
+    y = log(rho_1/(1-rho_1)) - 0.9* log(rho_2) + 0.9*gamma,
+    
+    x1 = 0.45*(cattle_heads**2),
+    
+    x2 = 0.45*(cattle_heads/area_amc)**2,
+    
+    x3 = 0.45*(cattle_heads/total)**2
+  ) |> 
+  ########## join with biomass data
+  left_join(
+    biomass,
+    by = "code_amc"
+  ) |> 
+  # calculate carbon density in CO2
+  # uses atomic weight of C (12) and CO2 (44)
+  # and the fact that biomass is about 50% C
+  mutate(
+    biomass_co2 = (biomass/2)*(44/12),
+    biomass_density = biomass_co2/area_amc
+  ) |> 
+  ########## terraclimate controls
+  left_join(
+    terraclimate,
+    
+    by = c("code_amc", "year")
+  )
+```
+
+## OLS with PPM
+
+```{r}
+ppm_ols <- feols(
+  data = ext_ppm,
+  y ~ x2
+  + ma_norm
+  + high_share
+  + year
+  + biomass_density
+  + area_amc
+  +tmmn_min + tmmx_max + pr
+  
+  | sw(1, main_biome, code_state, code_amc),
+  cluster = "code_amc"
+  )
+
+
+etable(
+  ppm_ols,
+  fitstat = ~ n + f + f.p + wf + wf.p + r2 + ar2 + wr2)
+```
+
+## IV with PPM
+
+```{r}
+ppm_iv <- feols(
+  data = ext_ppm,
+  y ~ 1 
+  + ma_norm
+  + low_share + mid_share
+  + biomass_density
+  + year
+  + area_amc
+  + tmmn_min + tmmx_max + pr
+  
+  | sw(1, main_biome, code_state, code_amc)
+  | x2 ~ ssiv + ssiv_2,
+  cluster = "code_amc"
+  )
+
+etable(
+  ppm_iv,
+  fitstat = ~ n + f + f.p + ivf + ivf.p)
+```
+
+# Counterfactuals
+
+To calculate a counterfactual, I'll choose a pair of models of each margin. Then, I predict the int margin model with real data, and compare the prediction to when a I make a variation in the data.
+
+I calculate the ext margin model for the predicted headcount and for the counterfactual. Probability for the following year remains the same because it is forward looking.
+
+## Intensive margin 
+
+```{r}
+######### IV model with State FE
+int_mod <- iv[[3]]
+
+########## Counterfactual data
+
+# increase 10% prices
+p_change = 0.1
+
+int_cf_data_p <- int_data |> 
+  mutate(
+    local_price = local_price * (1+p_change),
+    local_price_2 = local_price_2 * (1+p_change)
+    )
+
+# reduce degradation in 10%
+deg_change = 0.9
+
+int_cf_data_deg <- int_data |> 
+  mutate(
+    low_share = low_share * (1 - deg_change),
+    mid_share = mid_share * (1 - deg_change)
+  )
+
+# join counterfactuals with dataframe 
+int_cf <- int_data |> 
+  mutate(
+    h_hat = predict(int_mod),
+    
+    h_p = predict(int_mod, newdata = int_cf_data_p),
+    
+    h_deg = predict(int_mod, newdata = int_cf_data_deg)
+  )
+
+######### summarise variations
+int_cf_biome <- int_cf |> 
+  mutate(
+    H = cattle_heads_big,
+    H_hat = h_hat*area_amc,
+    H_p = h_p*area_amc,
+    H_deg = h_deg*area_amc
+  ) |> 
+  summarise(
+    .by = "main_biome",
+    real = sum(H),
+    expected = sum(H_hat),
+    cf_p = sum(H_p),
+    elast_p = (cf_p - expected)/expected * (1/p_change),
+    cf_deg = sum(H_deg),
+    elast_deg = (cf_deg - expected)/expected * (-1/deg_change)
+  )
+
+int_cf_total <- int_cf |> 
+  mutate(
+    H = cattle_heads_big,
+    H_hat = h_hat*area_amc,
+    H_p = h_p*area_amc,
+    H_deg = h_deg*area_amc
+  ) |> 
+  summarise(
+    main_biome = "Total",
+    real = sum(H),
+    expected = sum(H_hat),
+    cf_p = sum(H_p),
+    elast_p = (cf_p - expected)/expected * (1/p_change),
+    cf_deg = sum(H_deg),
+    elast_deg = (cf_deg - expected)/expected * (-1/deg_change)
+  )
+
+int_cf_latex <- bind_rows(
+  int_cf_biome,
+  int_cf_total
+  ) |> 
+  knitr::kable(
+    digits = 3,
+    caption = "Intensive margin counterfactuals",
+    format = "latex"
+  )
+
+cat(int_cf_latex)
+```
+
+## Extensive Margin
+
+```{r}
+ext_mod <- ext_ols[[3]]
+
+########## Counterfactual data
+
+# estimated
+ext_cf_data_hat <- ext_data |> 
+  left_join(
+    int_cf |> select(code_amc, year, h_hat, h_p, h_deg),
+    
+    by = c("code_amc", "year")
+  ) |> 
+  mutate(
+    x2 = 0.45*(h_hat)**2
+  )
+
+# price change
+ext_cf_data_p <- ext_data |> 
+  left_join(
+    int_cf |> select(code_amc, year, h_hat, h_p, h_deg),
+    
+    by = c("code_amc", "year")
+  ) |> 
+  mutate(
+    x2 = 0.45*(h_p)**2
+  )
+
+# degradation
+ext_cf_data_deg <- ext_data |> 
+  left_join(
+    int_cf |> select(code_amc, year, h_hat, h_p, h_deg),
+    
+    by = c("code_amc", "year")
+  ) |> 
+  mutate(
+    x2 = 0.45*(h_deg)**2,
+    low_share = low_share * (1 - deg_change),
+    mid_share = mid_share * (1 - deg_change)
+  )
+
+# join counterfactuals with dataframe 
+ext_cf <- ext_data |> 
+  mutate(
+    y_hat = predict(ext_mod, newdata = ext_cf_data_hat),
+    
+    y_p = predict(ext_mod, newdata = ext_cf_data_p),
+    
+    y_deg = predict(ext_mod, newdata = ext_cf_data_deg)
+  )
+
+########## calculate new probabilities
+
+logit = \(x) exp(x)/(1+exp(x))
+
+ext_cf_biome <- ext_cf |> 
+  mutate(
+    rho_hat = logit(
+      y_hat + 0.9*log(rho_2) - 0.9*gamma
+      ),
+    
+    rho_p = logit(
+      y_p + 0.9*log(rho_2) - 0.9*gamma
+      ),
+    
+    rho_deg = logit(
+      y_deg + 0.9*log(rho_2) - 0.9*gamma
+      )
+  ) |> 
+  summarise(
+    .by = "main_biome",
+    real = sum(rho_1*natural),
+    expected = sum(rho_hat*natural),
+    cf_p = sum(rho_p*natural),
+    elast_p = (cf_p - expected)/expected * (1/p_change),
+    cf_deg = sum(rho_deg*natural),
+    elast_deg = (cf_p - expected)/expected * (-1/deg_change)
+  )
+
+ext_cf_total <- ext_cf |> 
+  mutate(
+    rho_hat = logit(
+      y_hat + 0.9*log(rho_2) - 0.9*gamma
+      ),
+    
+    rho_p = logit(
+      y_p + 0.9*log(rho_2) - 0.9*gamma
+      ),
+    
+    rho_deg = logit(
+      y_deg + 0.9*log(rho_2) - 0.9*gamma
+      )
+  ) |> 
+  summarise(
+    main_biome = "Total",
+    real = sum(rho_1*natural),
+    expected = sum(rho_hat*natural),
+    cf_p = sum(rho_p*natural),
+    elast_p = (cf_p - expected)/expected * (1/p_change),
+    cf_deg = sum(rho_deg*natural),
+    elast_deg = (cf_p - expected)/expected * (-1/deg_change)
+  )
+
+ext_cf_latex <- bind_rows(
+  ext_cf_biome,
+  ext_cf_total
+  ) |> 
+  knitr::kable(
+    digits = 3,
+    caption = "Extensive margin counterfactuals",
+    format = "latex"
+  )
+
+cat(ext_cf_latex)
+
+```
+
+# Tables
+
+## Int
+
+```{r}
+etable(
+    ols,
+    stage=2, 
+    digits = 4,
+    fitstat = ~ n + f + wf + r2 + wr2 + ar2,
+    extralines = ~phi_ols,
+    tex = T,
+    drop = c("ma_norm", "^si", "area_amc", "past_share", "biomass"),
+    style.tex = style.tex("aer")
+    )
+```
+
+
+```{r}
+etable(
+    iv,
+    stage = 2,
+    digits = 4,
+    fitstat = ~ n + f + ivf,
+    extralines = ~phi_iv,
+    tex = T,
+    drop = c("ma_norm", "^si", "area_amc", "past_share", "biomass"),
+    style.tex = style.tex("aer")
+    )
+```
+
+## Ext
+
+```{r}
+etable(
+    ext_ols,
+    stage=2, 
+    digits = 4,
+    fitstat = ~ n + f + wf + r2 + wr2 + ar2,
+    tex = T,
+    drop = c("ma_norm", "^si", "area_amc", "past_share"),
+    style.tex = style.tex("aer")
+    )
+```
+
+
+```{r}
+etable(
+    ext_iv,
+    stage = 2,
+    digits = 4,
+    fitstat = ~ n + f + ivf,
+    tex = T,
+    drop = c("ma_norm", "^si", "area_amc", "past_share"),
+    style.tex = style.tex("aer")
+    )
+```
+
+## PPM
+
+```{r}
+etable(
+    ppm_ols,
+    stage=2, 
+    digits = 4,
+    fitstat = ~ n + f + wf + r2 + wr2 + ar2,
+    tex = T,
+    drop = c("ma_norm", "^si", "area_amc", "past_share"),
+    style.tex = style.tex("aer")
+    )
+```
+
+
+```{r}
+etable(
+    ppm_iv,
+    stage = 2,
+    digits = 4,
+    fitstat = ~ n + f + ivf,
+    tex = T,
+    drop = c("ma_norm", "^si", "area_amc", "past_share"),
+    style.tex = style.tex("aer")
+    )
+```
+
+# Maps
+
+```{r}
+map_data <- amc_1991_2022 |> 
+  select(-area_amc) |> 
+  cross_join(
+    tribble(~year, 2006, 2017)
+  ) |> 
+  right_join(
+    ext_data,
+    by = c("code_amc", "year")
+  )
+```
+
+## Prices
+
+```{r}
+map_prices <- ggplot() +
+  # Plot non-NA local_price values
+  geom_sf(
+    data = map_data,
+    aes(fill = local_price),  # Automatically detects geometry from sf object
+    color = NA
+  ) +
+  # Add outline
+  geom_sf(
+    data = brazil, 
+    color = "lightgrey",
+    fill = NA
+  ) +
+  # Create facets for different years
+  facet_wrap(~ year, ncol = 2) +  
+  # Apply the color scale
+  scale_fill_viridis_c(
+    option = "magma",
+    direction = -1
+  ) + 
+  # Adjust themes for cleaner appearance
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    legend.key.width = unit(0.2, "cm"),
+    legend.title = element_blank()
+  ) +
+  labs(
+    title = "Local Prices by Year in Sample",
+    subtitle = "Prices per cattle head in R$ of 2022"
+  )
+
+
+ggsave("../Outputs/Graphics/map_prices.pdf", plot = map_prices, device = "pdf", width = 10, height = 6)
+```
+
+## Transitions
+
+```{r}
+map_transitions <- ggplot(map_data) +
+  geom_sf(
+    data = map_data,
+    aes(fill = rho_1, geometry = geom), 
+    color = NA
+    ) +
+  facet_wrap(~ year, ncol = 2) +  
+  scale_fill_viridis_c(
+    option = "rocket",
+    direction = -1
+    ) +
+  geom_sf(
+    data = brazil, 
+    color = "lightgrey",
+    fill = NA
+    ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    legend.key.width = unit(0.2, "cm"),
+    legend.title = element_blank()
+    ) +
+  labs(
+    title = "Transition probabilities",
+    subtitle = "Yearly conversion rate from natural vegetation to pasture"
+    )
+
+ggsave("../Outputs/Graphics/map_transitions.pdf", plot = map_transitions, device = "pdf", width = 10, height = 6)
+```
+
+## Pasture quality
+
+```{r}
+map_quality <- ggplot(map_data) +
+  geom_sf(
+    aes(fill = low_share), 
+    color = NA
+    ) +
+  facet_wrap(~ year, ncol = 2) +  
+  scale_fill_viridis_c(
+    option = "rocket",
+    direction = -1
+    ) +
+  geom_sf(
+    data = brazil, 
+    color = "lightgrey",
+    fill = NA
+    ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    legend.key.width = unit(0.2, "cm"),
+    legend.title = element_blank()
+    ) +
+  labs(
+    title = "Pasture quality",
+    subtitle = "Share of pastures with low vegetative vigour by year"
+    )
+
+ggsave("../Outputs/Graphics/map_quality.pdf", plot = map_quality, device = "pdf", width = 10, height = 6)
+```
+
+## Biomass density
+
+```{r}
+map_biomass <- map_data |> 
+  filter(year == 2017) |>
+  ggplot() +
+  geom_sf(
+    aes(fill = biomass_density), 
+    color = NA
+    ) +  
+  scale_fill_viridis_c(
+    direction = -1
+    ) +
+  geom_sf(
+    data = brazil, 
+    color = "lightgrey",
+    fill = NA
+    ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    legend.key.width = unit(0.2, "cm"),
+    legend.title = element_blank()
+    ) +
+  labs(
+    title = "Aboveground Biomass",
+    subtitle = "Density of AGB in CO2-equivalent tons per hectare"
+    )
+
+ggsave("../Outputs/Graphics/map_biomass.pdf", plot = map_biomass, device = "pdf", width = 8, height = 8)
+```
+
+
+# Plots
+
+## Cattle heads
+
+```{r}
+plot_ch <- ext_ppm |> 
+  summarise(
+    ch = sum(cattle_heads),
+    .by = c(code_biome, main_biome, year)
+  ) |> 
+  mutate(
+    Bioma = case_when(
+      code_biome == 1 ~ "Amazônia",
+      code_biome == 2 ~ "Caatinga",
+      code_biome == 3 ~ "Cerrado",
+      code_biome == 4 ~ "Mata Atlântica",
+      code_biome == 5 ~ "Pampa",
+      code_biome == 6 ~ "Pantanal")
+  ) |> 
+  ggplot() +
+  # Line plot with color by biome
+  geom_line(
+    aes(x = year, y = ch, color = Bioma),
+    size = 1
+  ) +
+  scale_color_manual(
+    values = c(
+      "Amazônia" = "#1b9e77", 
+      "Caatinga" = "#ffbb78",
+      "Cerrado" = "#d95f02",
+      "Mata Antlântica" = "#66b3ff",
+      "Pampa" = "#d62728",
+      "Pantanal" = "#9467bd"
+      ),
+    name = "Main Biome"
+  ) +
+  # Labels and titles
+  labs(
+    title = "Cattle Heads Over Time by Main Biome",
+    subtitle = "Regional distribution of cattle heads from 2000 to 2022",
+    x = "Year",
+    y = "Cattle Heads"
+  ) +
+  # Improved theme
+  theme_minimal() +
+  theme(
+    axis.text = element_text(color = "black")
+  )
+
+ggsave("../Outputs/Graphics/plot_ch.pdf", plot = plot_ch, device = "pdf", width = 10, height = 6)
+```
+
+## Pastures
+
+```{r}
+land_cover_agg |> 
+  left_join(
+    select(agg_census_data, c(code_amc, code_biome, main_biome)),
+    by = "code_amc"
+  ) |> 
+  summarise(
+    pasture = sum(pasture, na.rm = T),
+    .by = c(code_biome, main_biome, year)
+  ) |> 
+  mutate(
+    Bioma = case_when(
+      code_biome == 1 ~ "Amazônia",
+      code_biome == 2 ~ "Caatinga",
+      code_biome == 3 ~ "Cerrado",
+      code_biome == 4 ~ "Mata Atlântica",
+      code_biome == 5 ~ "Pampa",
+      code_biome == 6 ~ "Pantanal")
+  ) |> 
+  ggplot() +
+  # Line plot with color by biome
+  geom_line(
+    aes(x = year, y = pasture, color = Bioma),
+    size = 1
+  ) +
+  scale_color_manual(
+    values = c(
+      "Amazônia" = "#1b9e77", 
+      "Caatinga" = "#ffbb78",
+      "Cerrado" = "#d95f02",
+      "Mata Antlântica" = "#66b3ff",
+      "Pampa" = "#d62728",
+      "Pantanal" = "#9467bd"
+      ),
+    name = "Main Biome"
+  ) +
+  # Labels and titles
+  labs(
+    title = "Pasture area Over Time by Main Biome",
+    subtitle = "Regional distribution of pastures from 2001 to 2020",
+    x = "Year",
+    y = "Pasture area (ha)"
+  ) +
+  # Improved theme
+  theme_minimal() +
+  theme(
+    axis.text = element_text(color = "black")
+  )
+```
+
+
