@@ -201,8 +201,8 @@ iv <- feols(
     ma_norm
   + si_median
   + high_share
-  + past_share_2006
-  + area_amc
+#  + past_share_2006
+#  + area_amc
   + year
   + tmmn_min
   + tmmx_max + pr
@@ -258,12 +258,12 @@ ols <- feols(
   h ~
     local_price
   + local_price_2
-  
+  + high_share
   + ma_norm
   + si_mean
   + past_share_2006
   + biomass_density
-  + area_amc
+#  + area_amc
   + year
   + tmmn_min
   + tmmx_max + high_share
@@ -376,13 +376,26 @@ ext_data <- transition_agg |>
   mutate(
     y = log(rho_1/(1-rho_1)) - 0.9* log(rho_2) + 0.9*gamma,
     
-    x1 = 0.45*(cattle_heads_big**2)/10**13,
+    x1 = 0.45*(cattle_heads_big**2),
     
     x2 = 0.45*(h)**2,
     
     x3 = 0.45*(cattle_heads_big/pasture)**2,
     
     x4 = 0.45*(cattle_heads/area_amc)**2
+  ) |> 
+  #################
+  # test with h_hat
+  #################
+  left_join(
+    int_data |> 
+      mutate(h_hat = predict(iv[[2]])) |> 
+      select(year, code_amc, h_hat),
+    
+    by = c("code_amc", "year")
+  ) |> 
+  mutate(
+    x5 = 0.45*(h_hat)**2
   )
 ```
 
@@ -392,14 +405,14 @@ ext_data <- transition_agg |>
 ```{r}
 ext_ols <- feols(
   data = ext_data,
-  y ~ x2
+  y ~ x5
   
   + ma_norm
   + si_median + si_q1_mean + si_q4_mean
   + high_share
-  + past_share_2006
-  + biomass_density
-  + area_amc
+#  + past_share_2006
+  + biomass_co2
+#  + area_amc
   + year 
   + tmmn_min + tmmx_max + pr
   
@@ -422,7 +435,7 @@ ext_iv <- feols(
   + si_median
   + high_share
   + biomass_density
-  + area_amc
+#  + area_amc
   + year
   + tmmn_min + tmmx_max + pr
   
@@ -551,7 +564,7 @@ ppm_ols <- feols(
   + high_share
   + year
   + biomass_density
-  + area_amc
+#  + area_amc
   +tmmn_min + tmmx_max + pr
   
   | sw(1, main_biome, code_state, code_amc),
@@ -574,7 +587,7 @@ ppm_iv <- feols(
   + low_share + mid_share
   + biomass_density
   + year
-  + area_amc
+#  + area_amc
   + tmmn_min + tmmx_max + pr
   
   | sw(1, main_biome, code_state, code_amc)
