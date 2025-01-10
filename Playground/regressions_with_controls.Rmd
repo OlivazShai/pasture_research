@@ -189,7 +189,6 @@ int_data <- left_join(
   )
 ```
 
-
 # Intensive margin
 
 ## IV 
@@ -209,7 +208,7 @@ iv <- feols(
 
   | sw(1,main_biome, code_state)
   
-  | high_share + local_price + local_price_2 ~ ssiv + ssiv_2 + pr,
+  | local_price + local_price_2 + high_share ~ ssiv + ssiv_2 + pr,
   
   panel.id = c("code_amc","year"),
   cluster = "code_amc"
@@ -407,17 +406,14 @@ ext_data <- transition_agg |>
 ext_ols <- feols(
   data = ext_data,
   y ~ x5
-  
-  + ma_norm
-  + si_median + si_q1_mean + si_q4_mean
   + high_share
-#  + past_share_2006
+  + ma_norm
+  + si_median
   + biomass_co2
-#  + area_amc
   + year 
   + tmmn_min + tmmx_max + pr
   
-  | sw(1,main_biome, code_state, code_amc),
+  | sw(1,main_biome, code_state),
   cluster = "code_amc"
   )
 
@@ -431,17 +427,16 @@ etable(
 ```{r}
 ext_iv <- feols(
   data = ext_data,
-  y ~ 
-    ma_norm
+  y ~ x5
+#  + high_share
+  + ma_norm
   + si_median
-  + high_share
-  + biomass_density
-#  + area_amc
-  + year
-  + tmmn_min + tmmx_max + pr
+  + biomass_co2
+  + year 
+  + tmmn_min + tmmx_max 
   
   | sw(1, main_biome, code_state, code_amc)
-  | x2 ~ ssiv + ssiv_2,
+  | high_share ~ pr,
   cluster = "code_amc"
   ) 
 
@@ -583,7 +578,7 @@ etable(
 ```{r}
 ppm_iv <- feols(
   data = ext_ppm,
-  y ~ x2 
+  y ~ x2
   + ma_norm
   + biomass_density
   + year
@@ -596,7 +591,8 @@ ppm_iv <- feols(
   )
 
 etable(
-  ppm_iv,
+  ppm_iv, 
+  stage = 2,
   fitstat = ~ n + f + f.p + ivf + ivf.p)
 ```
 
@@ -609,8 +605,8 @@ I calculate the ext margin model for the predicted headcount and for the counter
 ## Intensive margin 
 
 ```{r}
-######### IV model with State FE
-int_mod <- iv[[3]]
+######### IV model with Biome FE
+int_mod <- iv[[2]]
 
 ########## Counterfactual data
 
@@ -623,13 +619,15 @@ int_cf_data_p <- int_data |>
     local_price_2 = local_price_2 * (1+p_change)
     )
 
-# reduce degradation in 10%
-deg_change = 0.9
+# increase pasture quality to at least 90%
+min_high_share = 0.5
 
 int_cf_data_deg <- int_data |> 
   mutate(
-    low_share = low_share * (1 - deg_change),
-    mid_share = mid_share * (1 - deg_change)
+    high_share = if_else(
+      high_share > min_high_share, 
+      high_share, 
+      min_high_share),
   )
 
 # join counterfactuals with dataframe 
@@ -657,7 +655,7 @@ int_cf_biome <- int_cf |>
     cf_p = sum(H_p),
     elast_p = (cf_p - expected)/expected * (1/p_change),
     cf_deg = sum(H_deg),
-    elast_deg = (cf_deg - expected)/expected * (-1/deg_change)
+  #  elast_deg = (cf_deg - expected)/expected * (-1/deg_change)
   )
 
 int_cf_total <- int_cf |> 
@@ -674,38 +672,41 @@ int_cf_total <- int_cf |>
     cf_p = sum(H_p),
     elast_p = (cf_p - expected)/expected * (1/p_change),
     cf_deg = sum(H_deg),
-    elast_deg = (cf_deg - expected)/expected * (-1/deg_change)
+  #  elast_deg = (cf_deg - expected)/expected * (-1/deg_change)
   )
 
-int_cf_latex <- bind_rows(
+# int_cf_latex <- 
+  
+bind_rows(
   int_cf_biome,
   int_cf_total
   ) |> 
   knitr::kable(
     digits = 3,
-    caption = "Intensive margin counterfactuals",
-    format = "latex"
+    caption = "Intensive margin counterfactuals"
+    #,
+    #format = "latex"
   )
 
-cat(int_cf_latex)
+# cat(int_cf_latex)
 ```
 
 ## Extensive Margin
 
 ```{r}
-ext_mod <- ext_ols[[3]]
+ext_mod <- ext_ols[[2]]
 
 ########## Counterfactual data
 
 # estimated
 ext_cf_data_hat <- ext_data |> 
   left_join(
-    int_cf |> select(code_amc, year, h_hat, h_p, h_deg),
+    int_cf |> select(code_amc, year, h_p, h_deg),
     
     by = c("code_amc", "year")
   ) |> 
   mutate(
-    x2 = 0.45*(h_hat)**2
+    x5 = 0.45*(h_hat)**2
   )
 
 # price change
@@ -716,7 +717,7 @@ ext_cf_data_p <- ext_data |>
     by = c("code_amc", "year")
   ) |> 
   mutate(
-    x2 = 0.45*(h_p)**2
+    x5 = 0.45*(h_p)**2
   )
 
 # degradation
@@ -728,8 +729,10 @@ ext_cf_data_deg <- ext_data |>
   ) |> 
   mutate(
     x2 = 0.45*(h_deg)**2,
-    low_share = low_share * (1 - deg_change),
-    mid_share = mid_share * (1 - deg_change)
+    high_share = if_else(
+      high_share > min_high_share, 
+      high_share, 
+      min_high_share),
   )
 
 # join counterfactuals with dataframe 
@@ -767,7 +770,34 @@ ext_cf_biome <- ext_cf |>
     cf_p = sum(rho_p*natural),
     elast_p = (cf_p - expected)/expected * (1/p_change),
     cf_deg = sum(rho_deg*natural),
-    elast_deg = (cf_p - expected)/expected * (-1/deg_change)
+#    elast_deg = (cf_p - expected)/expected * (-1/deg_change)
+  )
+
+ext_cf_year <- ext_cf |> 
+  mutate(
+    rho_hat = logit(
+      y_hat + 0.9*log(rho_2) - 0.9*gamma
+      ),
+    
+    rho_p = logit(
+      y_p + 0.9*log(rho_2) - 0.9*gamma
+      ),
+    
+    rho_deg = logit(
+      y_deg + 0.9*log(rho_2) - 0.9*gamma
+      )
+  ) |> 
+  summarise(
+    .by = "year",,
+    real = sum(rho_1*natural),
+    expected = sum(rho_hat*natural),
+    cf_p = sum(rho_p*natural),
+    elast_p = (cf_p - expected)/expected * (1/p_change),
+    cf_deg = sum(rho_deg*natural),
+#    elast_deg = (cf_p - expected)/expected * (-1/deg_change)
+  ) |> 
+  mutate(
+    main_biome = as.character(year)
   )
 
 ext_cf_total <- ext_cf |> 
@@ -791,20 +821,24 @@ ext_cf_total <- ext_cf |>
     cf_p = sum(rho_p*natural),
     elast_p = (cf_p - expected)/expected * (1/p_change),
     cf_deg = sum(rho_deg*natural),
-    elast_deg = (cf_p - expected)/expected * (-1/deg_change)
+#    elast_deg = (cf_p - expected)/expected * (-1/deg_change)
   )
 
-ext_cf_latex <- bind_rows(
+# ext_cf_latex <- 
+
+bind_rows(
   ext_cf_biome,
+  ext_cf_year,
   ext_cf_total
   ) |> 
   knitr::kable(
     digits = 3,
-    caption = "Extensive margin counterfactuals",
-    format = "latex"
+    caption = "Extensive margin counterfactuals"
+  #  ,
+  #  format = "latex"
   )
 
-cat(ext_cf_latex)
+# cat(ext_cf_latex)
 
 ```
 
