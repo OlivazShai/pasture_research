@@ -200,16 +200,16 @@ iv <- feols(
   h ~
     ma_norm
   + si_median
-  + high_share
+#  + high_share
 #  + past_share_2006
 #  + area_amc
   + year
   + tmmn_min
-  + tmmx_max + pr
-  
+  + tmmx_max
+
   | sw(1,main_biome, code_state)
   
-  | local_price + local_price_2 ~ ssiv + ssiv_2,
+  | high_share + local_price + local_price_2 ~ ssiv + ssiv_2 + pr,
   
   panel.id = c("code_amc","year"),
   cluster = "code_amc"
@@ -260,13 +260,14 @@ ols <- feols(
   + local_price_2
   + high_share
   + ma_norm
-  + si_mean
-  + past_share_2006
-  + biomass_density
+  + si_median
+#  + past_share_2006
+#  + biomass_density
 #  + area_amc
   + year
   + tmmn_min
-  + tmmx_max + high_share
+  + tmmx_max 
+  + high_share
   
   | sw(1,main_biome,code_state, code_amc),
   panel.id = c("code_amc","year"),
