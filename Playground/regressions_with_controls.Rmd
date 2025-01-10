@@ -487,7 +487,7 @@ ext_ppm <- cattle_heads_ppm |>
     transition_agg |>
       select(
           code_amc,
-          year = year_from,
+          year = year_to,
           rho_1 = natural_pasture
       ) |> 
       mutate(
@@ -568,7 +568,7 @@ ppm_ols <- feols(
 #  + area_amc
   +tmmn_min + tmmx_max + pr
   
-  | sw(1, main_biome, code_state, code_amc),
+  | sw(1, main_biome, code_state),
   cluster = "code_amc"
   )
 
@@ -583,16 +583,15 @@ etable(
 ```{r}
 ppm_iv <- feols(
   data = ext_ppm,
-  y ~ 1 
+  y ~ x2 
   + ma_norm
-  + low_share + mid_share
   + biomass_density
   + year
 #  + area_amc
-  + tmmn_min + tmmx_max + pr
+  + tmmn_min + tmmx_max
   
-  | sw(1, main_biome, code_state, code_amc)
-  | x2 ~ ssiv + ssiv_2,
+  | sw(1, main_biome, code_state)
+  | high_share ~ pr,
   cluster = "code_amc"
   )
 
