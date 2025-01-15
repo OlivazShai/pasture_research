@@ -1394,6 +1394,27 @@ EXTENSIVE
 - gamma_t^e
 - gamma_biome^e
 
+Câmbio
+2019	3,9445
+2022	5,1642
+
+IPCA
+
+```{r}
+ipca_monthly <- ipeadata("PRECOS12_IPCA12") |> 
+  select(
+    month = date,
+    index = value
+  )
+
+ipca_monthly |> 
+  filter(
+    date == "2022-12-01"
+  )
+```
+
+
+
 # Regression table
 
 ## Intensive margin
