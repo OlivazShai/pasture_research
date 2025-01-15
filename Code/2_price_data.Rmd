@@ -1,7 +1,7 @@
 ---
 title: "Price Data"
 author: "Shai Vaz"
-date: "May 2024"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output: pdf_document
 ---
 
@@ -76,7 +76,7 @@ prices_chicken <- read_xlsx(
 ```{r}
 ipca_monthly <- ipeadata("PRECOS12_IPCA12") |> 
   select(
-    month = date,
+    date = date,
     index = value
   )
 ```
