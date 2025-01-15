@@ -1394,25 +1394,21 @@ EXTENSIVE
 - gamma_t^e
 - gamma_biome^e
 
-Câmbio
-2019	3,9445
-2022	5,1642
+Exchange
+2019	3.9445
+2022	5.1642
 
 IPCA
+2019    5320.25
+2022    6474.09
 
-```{r}
-ipca_monthly <- ipeadata("PRECOS12_IPCA12") |> 
-  select(
-    month = date,
-    index = value
-  )
+SCC (2019 US$)
+66.00
 
-ipca_monthly |> 
-  filter(
-    date == "2022-12-01"
-  )
-```
-
+Annuity/perpetuity equivalent
+6.60 (2019 US$)
+26.0337 (2019 R$)
+31.67981 (2022 R$)
 
 
 # Regression table
@@ -1420,7 +1416,6 @@ ipca_monthly |>
 ## Intensive margin
 
 ```{r}
-
 get_f_stats <- function(model) {
   map(
     list(
@@ -1492,12 +1487,75 @@ modelsummary(
   output = "../Outputs/Tables/main_int_table.tex",
   escape = FALSE
   )
+
+remove(get_f_stats, coef_rename, model_parameters, extra_rows)
 ```
 
 
 ## Extensive margin
 
+```{r}
+get_f_stats <- function(model) {
+  map(
+    list(`F` = fixest::fitstat(model, "f")$f$stat),
+    \(x) round(x, 4)
+    )
+}
 
+# Rename coefficients
+coef_rename <- c(
+  "x2" = "$\\frac{\\beta}{2}(h_{mt+1})^2$",
+  "high_share" = "Pasture Quality",
+  "biomass_density" = "$b_m$",
+  "year" = "Year"
+)
+
+# Add model parameters as an extra column
+model_parameters <- data.frame(
+  "Parameters" = c(
+  "$\\delta$", "",
+  "$\\gamma_{pasture}^e$", "",
+  "$\\gamma_t^e$")
+)
+
+# Add controls, fixed effects, and F-statistics as extra rows
+extra_rows <- data.frame(
+  rowname = c("Controls", 
+              "Fixed Effects", 
+              "F", 
+              "Clustered SE"),
+  value = c(
+    "Temp.; Past.Suit.; Mkt.Acc.", 
+    "Biome", 
+    get_f_stats(int_mod)[["F"]], 
+    "Yes (Municipality)"),
+  mod_par = ""
+  )
+
+# Create the table
+modelsummary(
+  list("$h_{mt+1}$" = ext_mod),
+  coef_map = coef_rename,
+  gof_map = "nobs",
+  fmt = 4, 
+  statistic = "{std.error}", 
+  stars = c("***"=0.01, "**"=0.05, "*"=0.10), 
+  add_rows = extra_rows,
+  title = "Extensive Margin FE Regression Results\\label{tab:main_ext}",
+  notes = paste(
+    "Standard errors clustered at the municipality level.",
+    "Biome fixed effects.",
+    "Controls: Pasture suitability, market access, 
+      minimum, maximum, and mean temperature."
+  ),
+  add_columns = model_parameters,
+  #output = "../Outputs/Tables/main_int_table.tex",
+  escape = FALSE
+  )
+
+
+remove(get_f_stats, coef_rename, model_parameters, extra_rows)
+```
 
 
 ## Structural parameters
