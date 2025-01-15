@@ -7,16 +7,13 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+options(knitr.kable.NA = '')
 ```
 
 ```{r, include=FALSE}
-# Data Wrangling
-library(dplyr)
-library(readr)
-library(tidyr)
-library(stringr)
-library(readxl)
-library(forcats)
+# Table
+library(kableExtra)
 
 # Graphics
 library(ggplot2)
@@ -29,6 +26,16 @@ library(sf)
 library(fixest)
 library(ivreg)
 library(stats)
+library(modelsummary)
+
+# Data Wrangling
+library(dplyr)
+library(readr)
+library(tidyr)
+library(stringr)
+library(readxl)
+library(forcats)
+library(purrr)
 
 # Personal functions
 source("../Functions/bulk_rds.R")
@@ -161,7 +168,12 @@ int_data <- left_join(
   ) |> 
   ############ include pasture quality
   left_join(
-    past_qual,
+    past_qual |> 
+            ####### testing lead high share
+            mutate( 
+              .by = code_amc,
+              high_share = dplyr::lead(high_share)
+            ),
     by = c("code_amc", "year")
   ) |>
             # filter out one NA on total pastures
@@ -199,12 +211,9 @@ iv <- feols(
   h ~
     ma_norm
   + si_median
-#  + high_share
-#  + past_share_2006
-#  + area_amc
   + year
-  + tmmn_min
-  + tmmx_max
+  + tmmn_min + tmmx_max
+  + tmmn_mean + tmmx_mean
 
   | sw(1,main_biome, code_state)
   
@@ -405,13 +414,15 @@ ext_data <- transition_agg |>
 ```{r}
 ext_ols <- feols(
   data = ext_data,
-  y ~ x5
+  y ~ x2
   + high_share
   + ma_norm
   + si_median
-  + biomass_co2
-  + year 
-  + tmmn_min + tmmx_max + pr
+  + biomass_density
+  + year
+  + tmmn_min + tmmx_max 
+  + tmmn_mean + tmmx_mean
+#  + pr
   
   | sw(1,main_biome, code_state),
   cluster = "code_amc"
@@ -419,7 +430,32 @@ ext_ols <- feols(
 
 etable(
   ext_ols,
-  fitstat = ~ n + f + f.p + wf + wf.p + r2 + ar2 + wr2)
+  fitstat = ~ n + f + wf + r2 + ar2 + wr2)
+```
+
+## Varying slope for biomass valuation
+
+```{r}
+ext_vary_biomass <- feols(
+  data = ext_data,
+  y ~ x2
+  + high_share
+  + ma_norm
+  + si_median
+  + biomass_density:main_biome
+  + year
+  + tmmn_min + tmmx_max 
+  + tmmn_mean + tmmx_mean
+#  + pr
+  
+  | sw(1,main_biome, code_state),
+  cluster = "code_amc"
+  )
+
+etable(
+  ext_vary_biomass,
+  fitstat = ~ n + f + wf + r2 + ar2 + wr2)
+
 ```
 
 ## IV with census
@@ -427,15 +463,16 @@ etable(
 ```{r}
 ext_iv <- feols(
   data = ext_data,
-  y ~ x5
+  y ~ x2
 #  + high_share
   + ma_norm
   + si_median
-  + biomass_co2
+  + biomass_density
   + year 
-  + tmmn_min + tmmx_max 
+  + tmmn_min + tmmx_max
+  #+ tmmn_mean + tmmx_mean
   
-  | sw(1, main_biome, code_state, code_amc)
+  | sw(1, main_biome, code_state)
   | high_share ~ pr,
   cluster = "code_amc"
   ) 
@@ -489,6 +526,7 @@ ext_ppm <- cattle_heads_ppm |>
         rho_2 = lead(rho_1),
         .by = code_amc)
   ) |> 
+  
   ############ join with shift share 
   left_join(
     by = c("code_amc", "year"),
@@ -544,7 +582,20 @@ ext_ppm <- cattle_heads_ppm |>
   ) |> 
   ########## terraclimate controls
   left_join(
-    terraclimate,
+    terraclimate |> 
+      mutate(
+        .by = code_amc,
+        pr_lag = dplyr::lag(pr)
+      ),
+    
+    by = c("code_amc", "year")
+  ) |> 
+  ############ include natural vegetation
+  left_join(
+    land_cover_agg |> 
+      select(
+        code_amc, year, natural
+      ),
     
     by = c("code_amc", "year")
   )
@@ -560,8 +611,11 @@ ppm_ols <- feols(
   + high_share
   + year
   + biomass_density
-#  + area_amc
-  +tmmn_min + tmmx_max + pr
+  + tmmn_min + tmmx_max 
+  + tmmn_mean + tmmx_mean 
+  + pr
+  
+  
   
   | sw(1, main_biome, code_state),
   cluster = "code_amc"
@@ -583,10 +637,11 @@ ppm_iv <- feols(
   + biomass_density
   + year
 #  + area_amc
-  + tmmn_min + tmmx_max
+#  + tmmn_min + tmmx_max
+  + tmmn_mean + tmmx_mean
 
   | sw(1, main_biome, code_state)
-  | high_share ~ pr,
+  | high_share ~ pr_lag,
   cluster = "code_amc"
   )
 
@@ -602,11 +657,21 @@ To calculate a counterfactual, I'll choose a pair of models of each margin. Then
 
 I calculate the ext margin model for the predicted headcount and for the counterfactual. Probability for the following year remains the same because it is forward looking.
 
+## Selected models
+
+```{r}
+######### Int margin - IV model with Biome FE
+int_mod <- iv[[2]]
+
+######### Ext margin - OLS model with Biome FE
+ext_mod <- ext_ols[[2]]
+```
+
+
 ## Intensive margin 
 
 ```{r}
-######### IV model with Biome FE
-int_mod <- iv[[2]]
+
 
 ########## Counterfactual data
 
@@ -620,7 +685,7 @@ int_cf_data_p <- int_data |>
     )
 
 # increase pasture quality to at least 90%
-min_high_share = 0.5
+min_high_share = 0.85
 
 int_cf_data_deg <- int_data |> 
   mutate(
@@ -694,8 +759,6 @@ bind_rows(
 ## Extensive Margin
 
 ```{r}
-ext_mod <- ext_ols[[2]]
-
 ########## Counterfactual data
 
 # estimated
@@ -706,7 +769,7 @@ ext_cf_data_hat <- ext_data |>
     by = c("code_amc", "year")
   ) |> 
   mutate(
-    x5 = 0.45*(h_hat)**2
+    x2 = 0.45*(h_hat)**2
   )
 
 # price change
@@ -717,7 +780,7 @@ ext_cf_data_p <- ext_data |>
     by = c("code_amc", "year")
   ) |> 
   mutate(
-    x5 = 0.45*(h_p)**2
+    x2 = 0.45*(h_p)**2
   )
 
 # degradation
@@ -842,7 +905,133 @@ bind_rows(
 
 ```
 
-# Tables
+## PPM
+
+```{r}
+ext_ppm_mod <- ppm_ols[[2]]
+
+########## Counterfactual data
+
+# estimated
+ext_ppm_cf_data_hat <- ext_ppm |>
+  filter(
+    year == 2006 | year == 2017
+  ) |> 
+  left_join(
+    int_cf |> select(code_amc, year, h_hat, h_deg),
+    
+    by = c("code_amc", "year")
+  ) |> 
+  mutate(
+    x2 = 0.45*(h_hat)**2
+  )
+
+# degradation
+ext_ppm_cf_data_deg <- ext_ppm_cf_data_hat |> 
+  mutate(
+    x2 = 0.45*(h_deg)**2,
+    
+    high_share = if_else(
+      high_share > min_high_share, 
+      high_share, 
+      min_high_share),
+  )
+
+# join counterfactuals with dataframe 
+ext_ppm_cf <- ext_ppm_cf_data_hat |> 
+  mutate(
+    y_hat = predict(ext_ppm_mod, newdata = ext_ppm_cf_data_hat),
+    
+    y_deg = predict(ext_ppm_mod, newdata = ext_ppm_cf_data_deg)
+  )
+
+########## calculate new probabilities
+
+logit = \(x) exp(x)/(1+exp(x))
+
+ext_ppm_cf_biome <- ext_ppm_cf |> 
+  mutate(
+    rho_hat = logit(
+      y_hat + 0.9*log(rho_2) - 0.9*gamma
+      ),
+    
+    rho_deg = logit(
+      y_deg + 0.9*log(rho_2) - 0.9*gamma
+      )
+  ) |> 
+  summarise(
+    .by = "main_biome",
+    real = sum(rho_1*natural, na.rm = T),
+    expected = sum(rho_hat*natural, na.rm = T),
+#    cf_p = sum(rho_p*natural),
+#    elast_p = (cf_p - expected)/expected * (1/p_change),
+    cf_deg = sum(rho_deg*natural, na.rm = T),
+#    elast_deg = (cf_p - expected)/expected * (-1/deg_change)
+  )
+
+ext_ppm_cf_year <- ext_ppm_cf |> 
+  mutate(
+    rho_hat = logit(
+      y_hat + 0.9*log(rho_2) - 0.9*gamma
+      ),
+    
+    rho_deg = logit(
+      y_deg + 0.9*log(rho_2) - 0.9*gamma
+      )
+  ) |> 
+  summarise(
+    .by = "year",,
+    real = sum(rho_1*natural, na.rm = T),
+    expected = sum(rho_hat*natural, na.rm = T),
+#    cf_p = sum(rho_p*natural),
+#    elast_p = (cf_p - expected)/expected * (1/p_change),
+    cf_deg = sum(rho_deg*natural, na.rm = T),
+#    elast_deg = (cf_p - expected)/expected * (-1/deg_change)
+  ) |> 
+  mutate(
+    main_biome = as.character(year)
+  )
+
+ext_ppm_cf_total <- ext_ppm_cf |> 
+  mutate(
+    rho_hat = logit(
+      y_hat + 0.9*log(rho_2) - 0.9*gamma
+      ),
+    
+    rho_deg = logit(
+      y_deg + 0.9*log(rho_2) - 0.9*gamma
+      )
+  ) |> 
+  summarise(
+    main_biome = "Total",
+    real = sum(rho_1*natural, na.rm = T),
+    expected = sum(rho_hat*natural, na.rm = T),
+#    cf_p = sum(rho_p*natural),
+#    elast_p = (cf_p - expected)/expected * (1/p_change),
+    cf_deg = sum(rho_deg*natural, na.rm = T),
+#    elast_deg = (cf_p - expected)/expected * (-1/deg_change)
+  )
+
+# ext_cf_latex <- 
+
+bind_rows(
+  ext_ppm_cf_biome,
+  ext_ppm_cf_year,
+  ext_ppm_cf_total
+  ) |> 
+  knitr::kable(
+    digits = 3,
+    caption = "Extensive margin counterfactuals"
+  #  ,
+  #  format = "latex"
+  )
+
+# cat(ext_cf_latex)
+
+```
+
+
+# Etable Tables
 
 ## Int
 
@@ -1192,6 +1381,200 @@ land_cover_agg |>
   theme(
     axis.text = element_text(color = "black")
   )
+```
+
+# Structural Parameters
+
+In this section, I will use the preferred empirical exercise to recover the structural parameters that arise from the model.
+
+EXTENSIVE
+- delta
+- alpha_b
+- gamma_x^e
+- gamma_t^e
+- gamma_biome^e
+
+# Regression table
+
+## Intensive margin
+
+```{r}
+
+get_f_stats <- function(model) {
+  map(
+    list(
+      `F (2nd stage)` = fixest::fitstat(model, "f")$f$stat,
+      `F (1st stage: local_price)` = fixest::fitstat(model, "ivf")$`ivf1::local_price`$stat,
+      `F (1st stage: local_price_2)` = fixest::fitstat(model, "ivf")$`ivf1::local_price_2`$stat,
+      `F (1st stage: high_share)` = fixest::fitstat(model, "ivf")$`ivf1::high_share`$stat),
+    
+    \(x) round(x, 4)
+  )
+}
+
+# Rename coefficients
+coef_rename <- c(
+  "fit_local_price" = "$p_{mt}$",
+  "fit_local_price_2" = "$p_{mt+1}$",
+  "fit_high_share" = "Pasture Quality",
+  "year" = "Year"
+)
+
+# Add model parameters as an extra column
+model_parameters <- data.frame(
+  "Parameters" = c(
+  "$\\dfrac{\\alpha_p}{\\delta \\beta}$", "",
+  "$\\dfrac{\\alpha_p (1 + \\phi)}{\\delta}$", "",
+  "$\\dfrac{\\gamma_{pasture}}{\\delta}$", "",
+  "$\\dfrac{\\gamma_t}{\\delta}$")
+)
+
+# Add controls, fixed effects, and F-statistics as extra rows
+extra_rows <- data.frame(
+  rowname = c("Controls", 
+              "Fixed Effects", 
+              "F (2nd stage)", 
+              "F (1st stage: $p_{mt}$)", 
+              "F (1st stage: $p_{mt+1}$)", 
+              "F (1st stage: Pasture Quality)", 
+              "Clustered SE"),
+  value = c(
+    "Temp.; Past.Suit.; Mkt.Acc.", 
+    "Biome", 
+    get_f_stats(int_mod)[["F (2nd stage)"]], 
+    get_f_stats(int_mod)[["F (1st stage: local_price)"]], 
+    get_f_stats(int_mod)[["F (1st stage: local_price_2)"]], 
+    get_f_stats(int_mod)[["F (1st stage: high_share)"]], 
+    "Yes (Municipality)"),
+  mod_par = ""
+  )
+
+# Create the table
+modelsummary(
+  list("$h_{mt+1}$" = int_mod),
+  coef_map = coef_rename,
+  gof_map = "nobs",
+  fmt = 4, 
+  statistic = "{std.error}", 
+  stars = c("***"=0.01, "**"=0.05, "*"=0.10), 
+  add_rows = extra_rows,
+  title = "Intensive Margin IV Regression Results\\label{tab:main_int}",
+  notes = paste(
+    "Standard errors clustered at the municipality level.",
+    "Biome fixed effects.",
+    "Controls: Pasture suitability, market access, 
+      minimum, maximum, and mean temperature.",
+    "Shift-share variables used as instruments for prices.",
+    "Lagged precipitation used as instruments for pasture quality."
+  ),
+  add_columns = model_parameters,
+  output = "../Outputs/Tables/main_int_table.tex",
+  escape = FALSE
+  )
+```
+
+
+## Extensive margin
+
+
+
+
+## Structural parameters
+
+I first define a function to calculate tghe structural parameters, then run and export as latex table.
+
+```{r}
+calculate_structural_params <- function(int_model, ext_model) {
+  # Extract coefficients and fixed effects from intensive margin
+  int_coefs <- coef(int_model)
+  int_fixed_effects <- fixef(int_model)$main_biome
+
+  # Calculate intensive margin parameters
+  alpha_p_delta <- -0.9 * int_coefs["fit_local_price"]
+  phi <- (int_coefs["fit_local_price_2"] / alpha_p_delta) - 1
+
+  # Extract coefficients and fixed effects from extensive margin
+  ext_coefs <- coef(ext_model)
+  ext_fixed_effects <- fixef(ext_model)$main_biome
+
+  # Calculate extensive margin parameters
+  delta <- ext_coefs["x2"]
+  alpha_p <- alpha_p_delta * delta
+  alpha_b <- - ext_coefs["biomass_density"]
+  gamma_pasture_e <- - ext_coefs["high_share"]
+  gamma_year_e <- - ext_coefs["year"]
+
+  # Back to intensive margin
+  gamma_pasture <- - int_coefs["fit_high_share"] * delta
+  gamma_year <- - int_coefs["year"] * delta
+
+  # multiply fixed effects by delta
+  
+  biomes = c(
+    "amazonia", "caatinga", "cerrado", "mata atlantica", "pampa", "pantanal"
+  )
+  
+  gamma_biome <- map_vec(int_fixed_effects, function(fe) - fe * delta)
+  names(gamma_biome) <- paste("$\\gamma_g: g =$", biomes)
+                        
+  gamma_biome_e <- map_vec(ext_fixed_effects, function(fe) - fe * delta)
+  names(gamma_biome_e) <- paste("$\\gamma_g^e: g =$", biomes)
+                          
+  # Combine parameters into a data frame
+  result <- data.frame(
+    Parameter = c(
+      "$\\phi$", "$\\delta$", "$\\alpha_p$", "$\\alpha_b$",
+      "$\\gamma_{pasture}$", 
+      "$\\gamma_t$",
+      names(gamma_biome), 
+      "$\\gamma_{pasture}^e$",
+      "$\\gamma_t^e$",
+      names(gamma_biome_e)
+      ),
+    
+    Value = c(
+      phi, delta, alpha_p, alpha_b,
+      gamma_pasture, gamma_year,
+      unname(gamma_biome), 
+      gamma_pasture_e,
+      gamma_year_e,
+      unname(gamma_biome_e) 
+      ),
+    
+    # Add column with parameters divided by alpha_p
+    Scaled = c(
+      NA,
+      NA,
+      NA,
+      map_vec(c(alpha_b,
+            gamma_pasture, gamma_year, unname(gamma_biome),
+            gamma_pasture_e, gamma_year_e, unname(gamma_biome_e)),
+          \(x) x / alpha_p)
+      )
+  )
+  
+  return(result)
+}
+```
+
+Running the function.
+
+```{r} 
+calculate_structural_params(int_mod, ext_mod) |> 
+  kbl(
+    digits = c(4,4,2),
+    col.names = c("Parameter", "Value", "Scaled by $\\alpha_p$ (R\\$)"),
+    booktabs = T,
+    label = "tab:str_param",
+    caption = "Structural Parameters",
+    format = "latex",
+    escape = FALSE,
+    linesep = "\\addlinespace"
+  ) |>
+  kable_classic_2(full_width = T) |> 
+  pack_rows("Intensive margin cost factors", 5, 12, latex_gap_space = "1em") |> 
+  pack_rows("Extensive margin cost factors", 13, 20, latex_gap_space = "1em") |> 
+  save_kable("../Outputs/Tables/str_param_table.tex")
 ```
 
 
