@@ -1463,7 +1463,7 @@ extra_rows <- data.frame(
               "F (2nd stage)", 
               "F (1st stage: $p_{mt}$)", 
               "F (1st stage: $p_{mt+1}$)", 
-              "F (1st stage: Pasture Quality)", 
+              "F (1st stage: Past. Qual.)", 
               "Clustered SE"),
   value = c(
     "Temp.; Past.Suit.; Mkt.Acc.", 
