@@ -405,6 +405,16 @@ ext_data <- transition_agg |>
   ) |> 
   mutate(
     x5 = 0.45*(h_hat)**2
+  ) |> 
+  ##############
+  # correct high_share back to current time
+  #############
+  mutate(
+    high_share = NULL
+  ) |> 
+  left_join(
+    past_qual |> select(high_share, code_amc, year),
+    by = c("code_amc", "year")
   )
 ```
 
@@ -1439,10 +1449,10 @@ coef_rename <- c(
 # Add model parameters as an extra column
 model_parameters <- data.frame(
   "Parameters" = c(
-  "$\\dfrac{\\alpha_p}{\\delta \\beta}$", "",
+  "$-\\dfrac{\\alpha_p}{\\delta \\beta}$", "",
   "$\\dfrac{\\alpha_p (1 + \\phi)}{\\delta}$", "",
-  "$\\dfrac{\\gamma_{pasture}}{\\delta}$", "",
-  "$\\dfrac{\\gamma_t}{\\delta}$")
+  "$-\\dfrac{\\gamma_{pasture}}{\\delta}$", "",
+  "$-\\dfrac{\\gamma_t}{\\delta}$")
 )
 
 # Add controls, fixed effects, and F-statistics as extra rows
@@ -1465,9 +1475,17 @@ extra_rows <- data.frame(
   mod_par = ""
   )
 
+# Name a model list dynamically 
+header = paste0("\\hline", "\\vspace{0.05em}", 
+                "$h_{mt+1}$", 
+                "\\vspace{0.05em}")
+
+model_list = setNames(list(int_mod), header)
+
+
 # Create the table
 modelsummary(
-  list("$h_{mt+1}$" = int_mod),
+  model_list,
   coef_map = coef_rename,
   gof_map = "nobs",
   fmt = 4, 
@@ -1514,8 +1532,9 @@ coef_rename <- c(
 model_parameters <- data.frame(
   "Parameters" = c(
   "$\\delta$", "",
-  "$\\gamma_{pasture}^e$", "",
-  "$\\gamma_t^e$")
+  "$-\\gamma_{pasture}^e$", "",
+  "$-\\alpha_b$", "",
+  "$-\\gamma_t^e$")
 )
 
 # Add controls, fixed effects, and F-statistics as extra rows
@@ -1527,14 +1546,22 @@ extra_rows <- data.frame(
   value = c(
     "Temp.; Past.Suit.; Mkt.Acc.", 
     "Biome", 
-    get_f_stats(int_mod)[["F"]], 
+    get_f_stats(ext_mod)[["F"]], 
     "Yes (Municipality)"),
   mod_par = ""
   )
 
+# Name a model list dynamically 
+header = paste0("\\hline", "\\vspace{0.05em}", 
+           "$ \\log \\left( \\frac{\\rho_{mt}}{1 - \\rho_{mt}} \\right) 
+            -\\beta \\log ( \\rho_{mt+1} ) + \\beta \\gamma $", 
+           "\\vspace{0.05em}") 
+
+model_list = setNames(list(ext_mod), header)
+
 # Create the table
 modelsummary(
-  list("$h_{mt+1}$" = ext_mod),
+  model_list,
   coef_map = coef_rename,
   gof_map = "nobs",
   fmt = 4, 
@@ -1549,12 +1576,12 @@ modelsummary(
       minimum, maximum, and mean temperature."
   ),
   add_columns = model_parameters,
-  #output = "../Outputs/Tables/main_int_table.tex",
+  output = "../Outputs/Tables/main_ext_table.tex",
   escape = FALSE
   )
 
 
-remove(get_f_stats, coef_rename, model_parameters, extra_rows)
+remove(get_f_stats, coef_rename, model_parameters, extra_rows, header, model_list)
 ```
 
 
@@ -1642,7 +1669,16 @@ Running the function.
 calculate_structural_params(int_mod, ext_mod) |> 
   kbl(
     digits = c(4,4,2),
-    col.names = c("Parameter", "Value", "Scaled by $\\alpha_p$ (R\\$)"),
+    
+    # configure header
+    col.names = c(
+      paste0("\\hline", "\\vspace{0.05em}",
+        "Parameter",
+        "\\vspace{0.05em}"),
+      "Value", 
+      "Scaled by $\\alpha_p$ (R\\$)"
+      ),
+    
     booktabs = T,
     label = "tab:str_param",
     caption = "Structural Parameters",
@@ -1650,7 +1686,10 @@ calculate_structural_params(int_mod, ext_mod) |>
     escape = FALSE,
     linesep = "\\addlinespace"
   ) |>
-  kable_classic_2(full_width = T) |> 
+  kable_styling(
+    full_width = T,
+    htmltable_class =  "lightable-classic-2"
+  ) |> 
   pack_rows("Intensive margin cost factors", 5, 12, latex_gap_space = "1em") |> 
   pack_rows("Extensive margin cost factors", 13, 20, latex_gap_space = "1em") |> 
   save_kable("../Outputs/Tables/str_param_table.tex")
