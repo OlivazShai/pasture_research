@@ -14,6 +14,7 @@ options(knitr.kable.NA = '')
 ```{r, include=FALSE}
 # Table
 library(kableExtra)
+library(tinytable)
 
 # Graphics
 library(ggplot2)
@@ -1476,9 +1477,8 @@ extra_rows <- data.frame(
   )
 
 # Name a model list dynamically 
-header = paste0("\\hline", "\\vspace{0.05em}", 
-                "$h_{mt+1}$", 
-                "\\vspace{0.05em}")
+header = paste0("\\hline", 
+                "$h_{mt+1}$")
 
 model_list = setNames(list(int_mod), header)
 
@@ -1502,8 +1502,20 @@ modelsummary(
     "Lagged precipitation used as instruments for pasture quality."
   ),
   add_columns = model_parameters,
-  output = "../Outputs/Tables/main_int_table.tex",
-  escape = FALSE
+  output = "tinytable",
+  escape = FALSE,
+  width = 1
+  ) |>
+  style_tt(
+    tabularray_inner = "
+      row{1} = {valign = m},
+      row{2,4,6,8} = {abovesep = 5pt, belowsep = -7pt},
+      column{3} = {valign = b}
+      "
+    ) |> 
+  save_tt(
+    output = "../Outputs/Tables/main_int_table.tex",
+    overwrite = T
   )
 
 remove(get_f_stats, coef_rename, model_parameters, extra_rows)
@@ -1551,11 +1563,12 @@ extra_rows <- data.frame(
   mod_par = ""
   )
 
+
 # Name a model list dynamically 
-header = paste0("\\hline", "\\vspace{0.05em}", 
-           "$ \\log \\left( \\frac{\\rho_{mt}}{1 - \\rho_{mt}} \\right) 
-            -\\beta \\log ( \\rho_{mt+1} ) + \\beta \\gamma $", 
-           "\\vspace{0.05em}") 
+header = paste0(
+  "\\hline",
+  "$ \\log \\left( \\frac{\\rho_{mt}}{1 - \\rho_{mt}} \\right)
+    -\\beta \\log ( \\rho_{mt+1} ) + \\beta \\gamma $") 
 
 model_list = setNames(list(ext_mod), header)
 
@@ -1576,10 +1589,21 @@ modelsummary(
       minimum, maximum, and mean temperature."
   ),
   add_columns = model_parameters,
-  output = "../Outputs/Tables/main_ext_table.tex",
-  escape = FALSE
+  output = "tinytable",
+  escape = FALSE,
+  width = 1
+    ) |>
+  style_tt(
+    tabularray_inner = "
+      rowsep = 4pt,
+      row{1} = {valign = m},
+      row{2,4,6,8} = {abovesep = 5pt, belowsep = -5pt}
+      "
+    ) |> 
+  save_tt(
+    output = "../Outputs/Tables/main_ext_table.tex",
+    overwrite = T
   )
-
 
 remove(get_f_stats, coef_rename, model_parameters, extra_rows, header, model_list)
 ```
@@ -1587,7 +1611,7 @@ remove(get_f_stats, coef_rename, model_parameters, extra_rows, header, model_lis
 
 ## Structural parameters
 
-I first define a function to calculate tghe structural parameters, then run and export as latex table.
+I first define a function to calculate the structural parameters, then run and export as latex table.
 
 ```{r}
 calculate_structural_params <- function(int_model, ext_model) {
@@ -1672,11 +1696,11 @@ calculate_structural_params(int_mod, ext_mod) |>
     
     # configure header
     col.names = c(
-      paste0("\\hline", "\\vspace{0.05em}",
-        "Parameter",
-        "\\vspace{0.05em}"),
+      paste0("\\hline", "\\addlinespace ",
+        "Parameter"),
       "Value", 
-      "Scaled by $\\alpha_p$ (R\\$)"
+      paste0("Scaled by $\\alpha_p$ (R\\$)",
+             "\\vspace{0.4em}")
       ),
     
     booktabs = T,
