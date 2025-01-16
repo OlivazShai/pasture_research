@@ -2,28 +2,38 @@
 \centering
 \begin{talltblr}[         %% tabularray outer open
 caption={Extensive Margin FE Regression Results\label{tab:main_ext}},
-note{}={* p \num{< 0.1}, ** p \num{< 0.05}, *** p \num{< 0.01}},
+note{}={* p < 0.1, ** p < 0.05, *** p < 0.01},
 note{ }={Standard errors clustered at the municipality level. Biome fixed effects. Controls: Pasture suitability, market access, 
       minimum, maximum, and mean temperature.},
 ]                     %% tabularray outer close
 {                     %% tabularray inner open
-colspec={Q[]Q[]Q[]},
+width={1\linewidth},
+colspec={X[]X[]X[]},
+rowsep = 4pt,
+      row{1} = {valign = m},
+      row{2,4,6,8} = {abovesep = 5pt, belowsep = -5pt},
+rowsep = 4pt,
+      row{1} = {valign = m},
+      row{2,4,6,8} = {abovesep = 5pt, belowsep = -5pt},
+rowsep = 4pt,
+      row{1} = {valign = m},
+      row{2,4,6,8} = {abovesep = 5pt, belowsep = -5pt},
 column{2,3}={}{halign=c,},
 column{1}={}{halign=l,},
 hline{10}={1,2,3}{solid, black, 0.05em},
 }                     %% tabularray inner close
 \toprule
-& \hline\vspace{0.05em}$ \log \left( \frac{\rho_{mt}}{1 - \rho_{mt}} \right) 
-            -\beta \log ( \rho_{mt+1} ) + \beta \gamma $\vspace{0.05em} & Parameters \\ \midrule %% TinyTableHeader
-$\frac{\beta}{2}(h_{mt+1})^2$ & \num{0.3114}**             & $\delta$              \\
-& \num{0.1498}               &                        \\
-Pasture Quality                 & \num{-0.3525}***           & $-\gamma_{pasture}^e$ \\
-& \num{0.0518}               &                        \\
-$b_m$                           & \num{0.0002}               & $-\alpha_b$           \\
-& \num{0.0002}               &                        \\
-Year                            & \num{0.0136}***            & $-\gamma_t^e$         \\
-& \num{0.0023}               &                        \\
-Num.Obs.                        & \num{4956}                 &                        \\
+& \hline$ \log \left( \frac{\rho_{mt}}{1 - \rho_{mt}} \right)
+    -\beta \log ( \rho_{mt+1} ) + \beta \gamma $ & Parameters \\ \midrule %% TinyTableHeader
+$\frac{\beta}{2}(h_{mt+1})^2$ & 0.3114**                    & $\delta$              \\
+& 0.1498                      &                        \\
+Pasture Quality                 & -0.3525***                  & $-\gamma_{pasture}^e$ \\
+& 0.0518                      &                        \\
+$b_m$                           & 0.0002                      & $-\alpha_b$           \\
+& 0.0002                      &                        \\
+Year                            & 0.0136***                   & $-\gamma_t^e$         \\
+& 0.0023                      &                        \\
+Num.Obs.                        & 4956                        &                        \\
 Controls                        & Temp.; Past.Suit.; Mkt.Acc. &                        \\
 Fixed Effects                   & Biome                       &                        \\
 F                               & 12.24                       &                        \\
