@@ -270,12 +270,12 @@ ols <- feols(
   + high_share
   + ma_norm
   + si_median
-#  + past_share_2006
-#  + biomass_density
-#  + area_amc
   + year
   + tmmn_min
   + tmmx_max 
+  + tmmn_mean
+  + tmmx_mean
+  
   + high_share
   
   | sw(1,main_biome,code_state, code_amc),
@@ -444,7 +444,7 @@ etable(
   fitstat = ~ n + f + wf + r2 + ar2 + wr2)
 ```
 
-## Varying slope for biomass valuation
+## Biomass valuation by biome
 
 ```{r}
 ext_vary_biomass <- feols(
@@ -453,7 +453,7 @@ ext_vary_biomass <- feols(
   + high_share
   + ma_norm
   + si_median
-  + biomass_density:main_biome
+  + i(main_biome, biomass_density)
   + year
   + tmmn_min + tmmx_max 
   + tmmn_mean + tmmx_mean
@@ -554,8 +554,8 @@ ext_ppm <- cattle_heads_ppm |>
   ) |> 
   ########## filter for years and probabilities without NA
   filter(
-    year > 2001,
-    year < 2021,
+    year > 2005,
+    year < 2022,
     
     rho_1 != 0,
     rho_1 != 1,
@@ -624,7 +624,7 @@ ppm_ols <- feols(
   + biomass_density
   + tmmn_min + tmmx_max 
   + tmmn_mean + tmmx_mean 
-  + pr
+#  + pr
   
   
   
@@ -695,7 +695,7 @@ int_cf_data_p <- int_data |>
     local_price_2 = local_price_2 * (1+p_change)
     )
 
-# increase pasture quality to at least 90%
+# increase pasture quality to at least some%
 min_high_share = 0.85
 
 int_cf_data_deg <- int_data |> 
@@ -1042,90 +1042,6 @@ bind_rows(
 ```
 
 
-# Etable Tables
-
-## Int
-
-```{r}
-etable(
-    ols,
-    stage=2, 
-    digits = 4,
-    fitstat = ~ n + f + wf + r2 + wr2 + ar2,
-    extralines = ~phi_ols,
-    tex = T,
-    drop = c("ma_norm", "^si", "area_amc", "past_share", "biomass"),
-    style.tex = style.tex("aer")
-    )
-```
-
-
-```{r}
-etable(
-    iv,
-    stage = 2,
-    digits = 4,
-    fitstat = ~ n + f + ivf,
-    extralines = ~phi_iv,
-    tex = T,
-    drop = c("ma_norm", "^si", "area_amc", "past_share", "biomass"),
-    style.tex = style.tex("aer")
-    )
-```
-
-## Ext
-
-```{r}
-etable(
-    ext_ols,
-    stage=2, 
-    digits = 4,
-    fitstat = ~ n + f + wf + r2 + wr2 + ar2,
-    tex = T,
-    drop = c("ma_norm", "^si", "area_amc", "past_share"),
-    style.tex = style.tex("aer")
-    )
-```
-
-
-```{r}
-etable(
-    ext_iv,
-    stage = 2,
-    digits = 4,
-    fitstat = ~ n + f + ivf,
-    tex = T,
-    drop = c("ma_norm", "^si", "area_amc", "past_share"),
-    style.tex = style.tex("aer")
-    )
-```
-
-## PPM
-
-```{r}
-etable(
-    ppm_ols,
-    stage=2, 
-    digits = 4,
-    fitstat = ~ n + f + wf + r2 + wr2 + ar2,
-    tex = T,
-    drop = c("ma_norm", "^si", "area_amc", "past_share"),
-    style.tex = style.tex("aer")
-    )
-```
-
-
-```{r}
-etable(
-    ppm_iv,
-    stage = 2,
-    digits = 4,
-    fitstat = ~ n + f + ivf,
-    tex = T,
-    drop = c("ma_norm", "^si", "area_amc", "past_share"),
-    style.tex = style.tex("aer")
-    )
-```
 
 # Maps
 
@@ -1717,6 +1633,145 @@ calculate_structural_params(int_mod, ext_mod) |>
   pack_rows("Intensive margin cost factors", 5, 12, latex_gap_space = "1em") |> 
   pack_rows("Extensive margin cost factors", 13, 20, latex_gap_space = "1em") |> 
   save_kable("../Outputs/Tables/str_param_table.tex")
+```
+
+## Extra tables
+
+### First stage results
+
+```{r}
+coef_rename <- c(
+  local_price = "$p_{mt}$",
+  local_price_2 = "$p_{mt+1}$",
+  high_share = "Pasture Quality",
+  year = "Year",
+  ssiv = "$ssiv_{mt}$",
+  ssiv_2 = "$ssiv_{mt+1}$",
+  pr = "Lag Precip",
+  code_amc = "Municipality",
+  main_biome = "Biome",
+  biomass_density = "$b_m$",
+  mata_atlantica = "mata atlantica",
+  y = "$ \\log \\left( \\frac{\\rho_{mt}}{1 - \\rho_{mt}} \\right) -\\beta \\log ( \\rho_{mt+1} ) + \\beta \\gamma $",
+  x2 = "$\\frac{\\beta}{2}(h_{mt+1})^2$",
+  h = "$h_{mt+1}$"
+  )
+
+etable(
+    int_mod,
+    stage = 1,
+    digits = 4,
+    fitstat = ~ n + f + ivf,
+    group = list(
+      Temperature = c("tmmn_min", "tmmx_max", "tmmn_mean", "tmmx_mean"),
+      `Past. Suit.` = "si_median",
+      `Mkt. Acc.` = "ma_norm"
+      ),
+    dict = coef_rename,
+    # output
+    file = "../Outputs/Tables/int_first_stage.tex",
+    replace = T,
+    # latex configurations
+    label = "tab:int_first_stage",
+    tabular = "X",
+    style.tex = style.tex(
+      model.title = "",
+      yesNo = "$\\checkmark$",
+      fontsize = "normalsize",
+      model.format = "\\hspace{1em}"
+      ),
+    title = "Intensive margin first stage results"
+    )
+```
+
+### Biomass by biome
+
+```{r}
+etable(
+  ext_vary_biomass[[2]],
+  fitstat = ~ n + f,
+  digits = 4,
+  group = list(
+      Temperature = c("tmmn_min", "tmmx_max", "tmmn_mean", "tmmx_mean"),
+      `Past. Suit.` = "si_median",
+      `Mkt. Acc.` = "ma_norm"
+      ),
+  dict = coef_rename,
+  # output
+  file = "../Outputs/Tables/ext_biomass_var.tex",
+  replace = T,
+  
+  # latex configurations
+  label = "tab:ext_biomass_var",
+  tabular = "X",
+  style.tex = style.tex(
+    model.title = "",
+    yesNo = "$\\checkmark$",
+    fontsize = "normalsize",
+    model.format = "\\hspace{1em}"
+    ),
+  title = "Extensive margin with varying carbon biomass valuation"
+  )
+```
+
+### PPM data for extensive margin
+
+```{r}
+etable(
+  ppm_ols[[2]],
+  fitstat = ~ n + f,
+  digits = 4,
+  group = list(
+      Temperature = c("tmmn_min", "tmmx_max", "tmmn_mean", "tmmx_mean"),
+      `Past. Suit.` = "si_median",
+      `Mkt. Acc.` = "ma_norm"
+      ),
+  dict = coef_rename,
+  # output
+  file = "../Outputs/Tables/ext_ppm.tex",
+  replace = T,
+  
+  # latex configurations
+  label = "tab:ext_ppm",
+  tabular = "X",
+  style.tex = style.tex(
+    model.title = "",
+    yesNo = "$\\checkmark$",
+    fontsize = "normalsize",
+    model.format = "\\hspace{1em}"
+    ),
+  title = "Extensive margin regression with survey data"
+  )
+```
+
+### Fixed efects intensive margin
+
+```{r}
+etable(
+    ols[[4]],
+    stage = 2,
+    digits = 4,
+    fitstat = ~ n + f,
+    group = list(
+      Temperature = c("tmmn_min", "tmmx_max", "tmmn_mean", "tmmx_mean"),
+      `Past. Suit.` = "si_median",
+      `Mkt. Acc.` = "ma_norm"
+      ),
+    dict = coef_rename,
+    # output
+    file = "../Outputs/Tables/int_fe.tex",
+    replace = T,
+    # latex configurations
+    label = "tab:int_fe",
+    tabular = "X",
+    style.tex = style.tex(
+      model.title = "",
+      yesNo = c("$\\checkmark$", "--"),
+      fontsize = "normalsize",
+      model.format = "\\hspace{1em}"
+      ),
+    title = "Intensive margin FE regression results"
+    )
 ```
 
 
