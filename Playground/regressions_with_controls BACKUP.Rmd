@@ -194,7 +194,7 @@ int_data <- left_join(
     biomass_co2 = (biomass/2)*(44/12),
     biomass_density = biomass_co2/area_amc
   ) |> 
-  ############ terraclimate controls
+  ############ terreclimate controls
   left_join(
     terraclimate,
     
@@ -239,7 +239,7 @@ phi_iv = function(x) {
   coefs <- stats::coef(x)
   
   # Calculate phi
-  phi <- - coefs["fit_local_price_2"] / (beta * coefs["fit_local_price"]) - 1
+  phi <- - coefs["fit_local_price_2"] / (0.9 * coefs["fit_local_price"]) - 1
   
   # Return phi value
   return(phi)
@@ -298,7 +298,7 @@ phi_ols = function(x) {
   coefs <- stats::coef(x)
   
   # Calculate phi
-  phi <- ( - coefs["local_price_2"] ) / (beta * coefs["local_price"]) - 1
+  phi <- ( - coefs["local_price_2"] ) / (0.9 * coefs["local_price"]) - 1
   
   # Return phi value
   return(phi)
@@ -357,110 +357,34 @@ Import Euler-Mascheroni constant:
 gamma = -digamma(1)
 ```
 
-I'll also define the discount parameter, beta.
-
-```{r}
-beta = 0.9
-```
-
-Create a function to calculate the intertemporal difference $\beta x_{mt+1} - x_{mt}$:
-
-```{r}
-tdif = \(x) beta * dplyr::lead({{x}}) - {{x}} 
-```
-
+Now, I join the transition probabilities with my intensive margin data and calculate the new regression variables. 
 
 ```{r}
 ext_data <- transition_agg |> 
   ############# get transition probabilities
   select(
     code_amc,
-    year = year_to,
+    year = year_from,
     rho_1 = natural_pasture
   ) |> 
   mutate(
     rho_2 = lead(rho_1),
     .by = code_amc
   ) |> 
-  ########### include ssiv
-  left_join(
-    ssiv |>  select(code_amc, area_amc, ssiv, year),
-    
+  ############# join with intensive margin data
+  right_join(
+    int_data,
     by = c("code_amc", "year")
-  ) |> 
-  ############ join with census data
-  left_join(
-    agg_census_data |> 
-      select(
-        year,
-        code_amc, 
-        main_biome,
-        cattle_heads,
-        cattle_heads_big
-      ),
-    
-    by = c("code_amc", "year")
-  ) |> 
-  # calculate normalized head count (intensity)
-  mutate(
-    h = cattle_heads_big/area_amc
   ) |>
-  ############# include controls
-  left_join(
-    tc_by_amc |> select(code_amc, tc_mean, tc_median),
-    by = "code_amc"
+  ############# remove probability 0 and 1 (impossible log odds)
+  filter(
+    rho_1 != 0 &
+    rho_1 != 1 &
+    rho_2 != 0 
   ) |> 
-  left_join(
-    ma_long,
-    by = c("code_amc", "year")
-  ) |> 
-  left_join(
-    si_by_amc |> select(code_amc, si_mean, si_median),
-    by = "code_amc"
-  ) |>
-  ############ include land use
-  left_join(
-    land_cover_agg,
-    
-    by = c("code_amc", "year")
-  )  |> 
-  ############ include pasture quality
-  left_join(
-    past_qual,
-    by = c("code_amc", "year")
-  ) |> 
-  ############ terraclimate controls
-  left_join(
-    terraclimate,
-    
-    by = c("code_amc", "year")
-  )|> 
-  ########### include carbon biomass
-  left_join(
-    biomass,
-    by = "code_amc"
-  ) |> 
-  # calculate carbon density in CO2
+  ############# calculate regression variables 
   mutate(
-    biomass_co2 = (biomass/2)*(44/12),
-    biomass_density = biomass_co2/area_amc
-  ) |> 
-  ############# calculate regression variables
-  # difference in cost factors
-  mutate(
-    .by = "code_amc",
-    across(
-      .cols = c(high_share, tmmn_min:tmmx_mean, pr),
-      .fns = tdif,
-      .names = "{.col}_tdif"
-      )
-  ) |> 
-  mutate(
-    .by = "code_amc",
-    
-    pr_lag = dplyr::lag(pr),
-    
-    y = log(rho_1/(1-rho_1)) - beta* log(rho_2) + beta*gamma,
+    y = log(rho_1/(1-rho_1)) - 0.9* log(rho_2) + 0.9*gamma,
     
     x1 = 0.45*(cattle_heads_big**2),
     
@@ -468,70 +392,43 @@ ext_data <- transition_agg |>
     
     x3 = 0.45*(cattle_heads_big/pasture)**2,
     
-    x4 = 0.45*(cattle_heads/area_amc)**2,
-    
-    x5 = 0.45*(cattle_heads/pasture)**2,
-    
-    year_tdif = (beta + (beta - 1) * year)
+    x4 = 0.45*(cattle_heads/area_amc)**2
+  ) |>  
+  ##############
+  # correct high_share back to current time
+  #############
+  mutate(
+    high_share = NULL
   ) |> 
-  ############# remove probability 0 and 1 (impossible log odds)
-  filter(
-    rho_1 != 0 &
-    rho_1 != 1 &
-    rho_2 != 0 
-  ) |> 
-  ############ filter to census years
-  filter(
-    year == 2006 | year == 2017
-  ) |> 
-  ########## remove NA
-  filter(
-    !is.na(x2)
+  left_join(
+    past_qual |> select(high_share, code_amc, year),
+    by = c("code_amc", "year")
   )
 ```
 
-```{r}
-ext_data |> 
-  mutate(
-    takenote = ifelse((year == 2006 | year ==  2017) & is.na(x2), T, NA),
-    .after = code_amc
-  ) |> 
-  group_by(code_amc) |> 
-  fill(takenote, .direction = "updown") |> 
-  filter(
-    takenote,
-    year %in% c(2006:2007, 2017:2018)
-  ) |> 
-  View()
-```
 
-
-## IV with Census
+## OLS with Census
 
 ```{r}
-ext_iv <- feols(
+ext_ols <- feols(
   data = ext_data,
-  y ~ 
-  x2
-#  + high_share_tdif
+  y ~ x2
+  + high_share
   + ma_norm
   + si_median
   + biomass_density
-  + year_tdif
-  + tmmn_min_tdif + tmmx_max_tdif 
-  + tmmn_mean_tdif + tmmx_mean_tdif
-#  + pr_tdif
-    
-  | sw(1,main_biome, code_state)
-  | high_share_tdif ~ pr + pr_lag
-,
+  + year
+  + tmmn_min + tmmx_max 
+  + tmmn_mean + tmmx_mean
+#  + pr
+  
+  | sw(1,main_biome, code_state),
   cluster = "code_amc"
   )
 
 etable(
   ext_ols,
-  fitstat = ~ n + f + ivf
-  )
+  fitstat = ~ n + f + wf + r2 + ar2 + wr2)
 ```
 
 ## Biomass valuation by biome
@@ -555,8 +452,7 @@ ext_vary_biomass <- feols(
 
 etable(
   ext_vary_biomass,
-  fitstat = ~ n + f + wf + r2 + ar2 + wr2
-  )
+  fitstat = ~ n + f + wf + r2 + ar2 + wr2)
 
 ```
 
@@ -662,7 +558,7 @@ ext_ppm <- cattle_heads_ppm |>
   ) |> 
   ########## calculate regression variables
   mutate(
-    y = log(rho_1/(1-rho_1)) - beta* log(rho_2) + beta*gamma,
+    y = log(rho_1/(1-rho_1)) - 0.9* log(rho_2) + 0.9*gamma,
     
     x1 = 0.45*(cattle_heads**2),
     
@@ -778,7 +674,7 @@ ext_mod <- ext_ols[[2]]
 ###############################
 
 # increase pasture quality to at least some%
-min_high_share = 0.95
+min_high_share = 0.9
 
 int_cf_data_recovery <- int_data |> 
   mutate(
@@ -858,15 +754,15 @@ logit = \(x) exp(x)/(1+exp(x))
 ext_cf |> 
   mutate(
     rho_hat = logit(
-      y_hat + beta*log(rho_2) - beta*gamma
+      y_hat + 0.9*log(rho_2) - 0.9*gamma
       ),
     
     rho_recovery = logit(
-      y_recovery + beta*log(rho_2) - beta*gamma
+      y_recovery + 0.9*log(rho_2) - 0.9*gamma
       ),
     
     rho_potential = logit(
-      y_potential + beta*log(rho_2) - beta*gamma
+      y_potential + 0.9*log(rho_2) - 0.9*gamma
       )
   ) |> 
   summarise(
@@ -1423,7 +1319,7 @@ calculate_structural_params <- function(int_model, ext_model) {
   int_fixed_effects <- fixef(int_model)$main_biome
 
   # Calculate intensive margin parameters
-  alpha_p_delta <- -beta * int_coefs["fit_local_price"]
+  alpha_p_delta <- -0.9 * int_coefs["fit_local_price"]
   phi <- (int_coefs["fit_local_price_2"] / alpha_p_delta) - 1
 
   # Extract coefficients and fixed effects from extensive margin
