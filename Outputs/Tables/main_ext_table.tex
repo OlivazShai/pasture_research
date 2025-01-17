@@ -1,10 +1,10 @@
 \begin{table}
 \centering
 \begin{talltblr}[         %% tabularray outer open
-caption={Extensive Margin FE Regression Results\label{tab:main_ext}},
+caption={Extensive Margin OLS Regression Results\label{tab:main_ext}},
 note{}={* p < 0.1, ** p < 0.05, *** p < 0.01},
-note{ }={Standard errors clustered at the municipality level. Biome fixed effects. Controls: Pasture suitability, market access, 
-      minimum, maximum, and mean temperature.},
+note{ }={Standard errors clustered at the municipality level. Controls: Pasture suitability, market access, 
+      minimum, maximum, and mean temperature. All time varying controls have been calculated as an inter-temporal difference of the form $\beta x_{mt+1}-x_{mt}$. Precipitation used as an instrument for pasture quality, also calculated as an inter-temporal difference.},
 ]                     %% tabularray outer close
 {                     %% tabularray inner open
 width={1\linewidth},
@@ -20,24 +20,26 @@ rowsep = 4pt,
       row{2,4,6,8} = {abovesep = 5pt, belowsep = -5pt},
 column{2,3}={}{halign=c,},
 column{1}={}{halign=l,},
-hline{10}={1,2,3}{solid, black, 0.05em},
+hline{12}={1,2,3}{solid, black, 0.05em},
 }                     %% tabularray inner close
 \toprule
 & \hline$ \log \left( \frac{\rho_{mt}}{1 - \rho_{mt}} \right)
     -\beta \log ( \rho_{mt+1} ) + \beta \gamma $ & Parameters \\ \midrule %% TinyTableHeader
-$\frac{\beta}{2}(h_{mt+1})^2$ & 0.3114**                    & $\delta$              \\
-& 0.1498                      &                        \\
-Pasture Quality                 & -0.3525***                  & $-\gamma_{pasture}^e$ \\
-& 0.0518                      &                        \\
-$b_m$                           & 0.0002                      & $-\alpha_b$           \\
-& 0.0002                      &                        \\
-Year                            & 0.0136***                   & $-\gamma_t^e$         \\
-& 0.0023                      &                        \\
-Num.Obs.                        & 4956                        &                        \\
-Controls                        & Temp.; Past.Suit.; Mkt.Acc. &                        \\
-Fixed Effects                   & Biome                       &                        \\
-F                               & 12.24                       &                        \\
-Clustered SE                    & Yes (Municipality)          &                        \\
+Intercept                                    & 11.6612**                   & \Psi                 \\
+& (4.6359)                    &                       \\
+$\frac{\beta}{2}(h_{mt+1})^2$              & 0.3458**                    & $\delta$             \\
+& (0.1738)                    &                       \\
+Pasture Quality ($\beta x_{mt+1} - x_{mt})$ & -3.6662***                  & $\gamma_{pasture}^e$ \\
+& (1.0833)                    &                       \\
+$b_m$                                        & -0.0007***                  & $-\alpha_b$          \\
+& (0.0002)                    &                       \\
+$(\beta + (\beta - 1) t)$                  & 0.0575**                    & $\gamma_t^e$         \\
+& (0.0234)                    &                       \\
+Num.Obs.                                     & 6250                        &                       \\
+Controls                                     & Temp.; Past.Suit.; Mkt.Acc. &                       \\
+F (2nd stage)                                & 6.7886                      &                       \\
+F (1st stage: Past. Qual.)                   & 273.9623                    &                       \\
+Clustered SE                                 & Yes (Municipality)          &                       \\
 \bottomrule
 \end{talltblr}
 \end{table}
