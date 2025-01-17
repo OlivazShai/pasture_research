@@ -1,0 +1,38 @@
+
+\begin{table}[htbp]
+   \caption{\label{tab:ext_ppm} Extensive margin regression with survey data}
+   \centering
+   \normalsize
+   \begin{tabularx}{\textwidth}{l *2{>{\centering\arraybackslash}X}}
+      \tabularnewline \midrule \midrule
+      Dependent Variable: & \multicolumn{2}{c}{$ \log \left( \frac{\rho_{mt}}{1 - \rho_{mt}} \right) -\beta \log ( \rho_{mt+1} ) + \beta \gamma $ \vspace{1ex}}\\
+                                                   & OLS                     & IV \\   
+                                                   & \hspace{1em}            & \hspace{2em}\\   
+      \midrule
+      \emph{Variables}\\
+      $\frac{\beta}{2}(h_{mt+1})^2$                & 0.0927$^{***}$          & 0.2410$^{***}$\\   
+                                                   & (0.0248)                & (0.0843)\\   
+      Pasture Quality ($\beta x_{mt+1} - x_{mt}$)  & 1.420$^{***}$           & 7.927$^{***}$\\   
+                                                   & (0.0811)                & (2.273)\\   
+      $b_m$                                        & -0.0005$^{***}$         & 0.0007$^{*}$\\   
+                                                   & ($6.08\times 10^{-5}$)  & (0.0004)\\   
+      $(\beta + (\beta - 1) t)$                    & -0.0138$^{***}$         & -0.0258$^{***}$\\   
+                                                   & (0.0041)                & (0.0054)\\   
+      Temperature                                  & $\checkmark$            & $\checkmark$\\   
+      Past. Suit.                                  & $\checkmark$            & $\checkmark$\\   
+      Mkt. Acc.                                    & $\checkmark$            & $\checkmark$\\   
+      Precipitation                                & $\checkmark$            & $\checkmark$\\   
+      \midrule
+      \emph{Fixed-effects}\\
+      Biome                                        & $\checkmark$            & $\checkmark$\\   
+      \midrule
+      \emph{Fit statistics}\\
+      Observations                                 & 68,214                  & 68,214\\  
+      F-test                                       & 7.4815                  & 6.7854\\  
+      \midrule \midrule
+      \multicolumn{3}{l}{\emph{Clustered (Municipality) standard-errors in parentheses}}\\
+      \multicolumn{3}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+   \end{tabularx}
+\end{table}
+
+
