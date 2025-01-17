@@ -26,7 +26,6 @@ library(sf)
 # Econometrics
 library(fixest)
 library(ivreg)
-library(stats)
 library(modelsummary)
 
 # Data Wrangling
@@ -202,6 +201,13 @@ int_data <- left_join(
   )
 ```
 
+# Discount factor
+
+```{r}
+beta = 0.9
+```
+
+
 # Intensive margin
 
 ## IV 
@@ -236,7 +242,7 @@ Etable with phi:
 ```{r}
 phi_iv = function(x) {
   # Extract coefficients
-  coefs <- stats::coef(x)
+  coefs <- coef(x)
   
   # Calculate phi
   phi <- - coefs["fit_local_price_2"] / (beta * coefs["fit_local_price"]) - 1
@@ -316,38 +322,6 @@ etable(
 
 ```
 
-# Diagnostics (one iv)
-
-```{r, eval=FALSE}
-a <- joined_data |> 
-  mutate(
-    fe = as_factor(code_amc),
-    fe_2 = as_factor(main_biome)
-  ) |> 
-  drop_na() |> 
-  filter(
-    cattle_heads_big != 0
-  )
-```
-
-```{r, eval=FALSE}
-first_stage1 <- lm(local_price ~ ssiv, data = a)
-first_stage2 <- lm(local_price_2 ~ ssiv_2, data = a)
-
-# Extract predicted values
-a$local_price_hat <- predict(first_stage1)
-a$local_price_2_hat <- predict(first_stage2)
-```
-
-```{r, eval=FALSE}
-iv_model <- ivreg(
-  cattle_heads_big ~ local_price_hat + local_price_2_hat:fe_2 + fe_2, 
-  data = a
-)
-
-
-summary(iv_model)
-```
 
 # Extensive margin
 
@@ -355,12 +329,6 @@ Import Euler-Mascheroni constant:
 
 ```{r}
 gamma = -digamma(1)
-```
-
-I'll also define the discount parameter, beta.
-
-```{r}
-beta = 0.9
 ```
 
 Create a function to calculate the intertemporal difference $\beta x_{mt+1} - x_{mt}$:
@@ -677,9 +645,10 @@ ppm_ols <- feols(
   data = ext_ppm,
   y ~ x2
   + high_share_tdif
-  + ma_norm
-  + year_tdif
   + biomass_density
+  + ma_norm
+  + si_median
+  + year_tdif
   + tmmn_min_tdif + tmmx_max_tdif 
   + tmmn_mean_tdif + tmmx_mean_tdif 
   + pr_tdif
@@ -700,12 +669,13 @@ etable(
 ppm_iv <- feols(
   data = ext_ppm,
   y ~ x2
-  + ma_norm
   + biomass_density
+  + ma_norm
+  + si_median
   + year_tdif
   + tmmn_min_tdif + tmmx_max_tdif 
   + tmmn_mean_tdif + tmmx_mean_tdif
-#  + pr_tdif
+  + pr_tdif
  
   | sw(1, main_biome, code_state)
   | high_share_tdif ~ pr,
@@ -718,21 +688,21 @@ etable(
   fitstat = ~ n + f + f.p + ivf + ivf.p)
 ```
 
-# Counterfactuals
-
-To calculate a counterfactual, I'll choose a pair of models of each margin. Then, I predict the int margin model with real data, and compare the prediction to when a I make a variation in the data.
-
-I calculate the ext margin model for the predicted headcount and for the counterfactual. Probability for the following year remains the same because it is forward looking.
-
-## Selected models
+# Selected models
 
 ```{r}
 ######### Int margin - IV model with Biome FE
 int_mod <- iv[[2]]
 
 ######### Ext margin - OLS model with Biome FE
-ext_mod <- ext_iv[[1]]
+ext_mod <- ext_iv[[2]]
 ```
+
+# Counterfactuals
+
+To calculate a counterfactual, I'll choose a pair of models of each margin. Then, I predict the int margin model with real data, and compare the prediction to when a I make a variation in the data.
+
+I calculate the ext margin model for the predicted headcount and for the counterfactual. Probability for the following year remains the same because it is forward looking.
 
 
 ## Main scenarios
@@ -743,7 +713,7 @@ ext_mod <- ext_iv[[1]]
 ###############################
 
 # increase pasture quality to at least some%
-min_high_share = 0.95
+min_high_share = 0.9
 
 int_cf_data_recovery <- int_data |> 
   mutate(
@@ -751,14 +721,27 @@ int_cf_data_recovery <- int_data |>
       high_share > min_high_share, 
       high_share, 
       min_high_share),
+    
+    .before = h
   )
 
 # join counterfactuals with dataframe 
 int_cf <- int_data |> 
   mutate(
-    h_hat = predict(int_mod),
-    h_recovery = predict(int_mod, newdata = int_cf_data_recovery)
+    h_hat = fitted(int_mod),
+    h_hat1 = predict(int_mod),
+    h_hat2 = predict(int_mod, newdata = int_data),
+    h_recovery = predict(int_mod, newdata = int_cf_data_recovery),
+    high_share_old = high_share,
+    high_share_cf = if_else(
+      high_share > min_high_share, 
+      high_share, 
+      min_high_share),
+    
+    .after = h
   )
+
+a <- data.frame(int_data == int_cf_data_recovery)
 
 ################################
 ######### Extensive margin #####
@@ -1245,7 +1228,7 @@ extra_rows <- data.frame(
   )
 
 # Name a model list dynamically 
-header = paste0("\\hline", 
+header = paste0("\\toprule", 
                 "$h_{mt+1}$")
 
 model_list = setNames(list(int_mod), header)
@@ -1305,7 +1288,6 @@ get_f_stats <- function(model) {
 
 # Rename coefficients
 coef_rename <- c(
-  "(Intercept)" = "Intercept",
   "x2" = "$\\frac{\\beta}{2}(h_{mt+1})^2$",
   "fit_high_share_tdif" = "Pasture Quality ($\\beta x_{mt+1} - x_{mt})$",
   "biomass_density" = "$b_m$",
@@ -1315,7 +1297,6 @@ coef_rename <- c(
 # Add model parameters as an extra column
 model_parameters <- data.frame(
   "Parameters" = c(
-  "\\Psi", "",
   "$\\delta$", "",
   "$\\gamma_{pasture}^e$", "",
   "$-\\alpha_b$", "",
@@ -1329,7 +1310,7 @@ extra_rows <- data.frame(
               "F (1st stage: Past. Qual.)",
               "Clustered SE"),
   value = c(
-    "Temp.; Past.Suit.; Mkt.Acc.",
+    "Temp.; Past.Suit.; Mkt.Acc.; Precip.",
     get_f_stats(ext_mod)[["F (2nd stage)"]],
     get_f_stats(ext_mod)[["F (1st stage: high_share_tdif)"]], 
     "Yes (Municipality)"),
@@ -1338,7 +1319,7 @@ extra_rows <- data.frame(
 
 # Name a model list dynamically 
 header = paste0(
-  "\\hline",
+  "\\toprule",
   "$ \\log \\left( \\frac{\\rho_{mt}}{1 - \\rho_{mt}} \\right)
     -\\beta \\log ( \\rho_{mt+1} ) + \\beta \\gamma $") 
 
@@ -1353,12 +1334,14 @@ modelsummary(
   statistic = "({std.error})", 
   stars = c("***"=0.01, "**"=0.05, "*"=0.10), 
   add_rows = extra_rows,
-  title = "Extensive Margin OLS Regression Results\\label{tab:main_ext}",
+  title = "Extensive Margin IV Regression Results\\label{tab:main_ext}",
   notes = paste(
     "Standard errors clustered at the municipality level.",
-    "Controls: Pasture suitability, market access, 
-      minimum, maximum, and mean temperature. All time varying controls have been calculated as an inter-temporal difference of the form $\\beta x_{mt+1}-x_{mt}$.",
-    "Precipitation used as an instrument for pasture quality, also calculated as an inter-temporal difference."
+    "Controls: Pasture suitability, market access, precipitation,
+      minimum, maximum, and mean temperature.", 
+    "All time varying controls have been calculated as an inter-temporal 
+      difference of the form $\\beta x_{mt+1}-x_{mt}$.",
+    "Precipitation in levels used as an instrument for the intertemporal difference in pasture quality."
   ),
   add_columns = model_parameters,
   output = "tinytable",
@@ -1397,14 +1380,14 @@ calculate_structural_params <- function(int_model, ext_model) {
 
   # Extract coefficients and fixed effects from extensive margin
   ext_coefs <- coef(ext_model)
+  ext_fixed_effects <- fixef(ext_model)$main_biome
 
   # Calculate extensive margin parameters
-  psi <- ext_coefs["(Intercept)"]
   delta <- ext_coefs["x2"]
   alpha_p <- alpha_p_delta * delta
   alpha_b <- - ext_coefs["biomass_density"]
   gamma_pasture_e <- ext_coefs["fit_high_share_tdif"]
-  gamma_year_e <- - ext_coefs["year"]
+  gamma_year_e <- ext_coefs["year_tdif"]
 
   # Back to intensive margin
   gamma_pasture <- - int_coefs["fit_high_share"] * delta
@@ -1418,7 +1401,7 @@ calculate_structural_params <- function(int_model, ext_model) {
   gamma_biome <- map_vec(int_fixed_effects, function(fe) - fe * delta) # multiply int mar FE by delta
   names(gamma_biome) <- paste("$\\gamma_g: g =$", biomes)
                         
-  gamma_biome_e <- map_vec(ext_fixed_effects, function(fe) - fe)
+  gamma_biome_e <- map_vec(ext_fixed_effects, function(fe) fe / (beta - 1)) # divide by beta - 1
   names(gamma_biome_e) <- paste("$\\gamma_g^e: g =$", biomes)
                           
   # Combine parameters into a data frame
@@ -1498,8 +1481,10 @@ calculate_structural_params(int_mod, ext_mod) |>
 coef_rename <- c(
   local_price = "$p_{mt}$",
   local_price_2 = "$p_{mt+1}$",
-  high_share = "Pasture Quality",
+  high_share = "Pasture Quality ($x_{mt+1}$)",
+  high_share_tdif = "Pasture Quality ($\\beta x_{mt+1} - x_{mt}$)",
   year = "Year",
+  year_tdif = "$(\\beta + (\\beta - 1) t)$",
   ssiv = "$ssiv_{mt}$",
   ssiv_2 = "$ssiv_{mt+1}$",
   pr = "Lag Precip",
@@ -1507,7 +1492,7 @@ coef_rename <- c(
   main_biome = "Biome",
   biomass_density = "$b_m$",
   mata_atlantica = "mata atlantica",
-  y = "$ \\log \\left( \\frac{\\rho_{mt}}{1 - \\rho_{mt}} \\right) -\\beta \\log ( \\rho_{mt+1} ) + \\beta \\gamma $",
+  y = "$ \\log \\left( \\frac{\\rho_{mt}}{1 - \\rho_{mt}} \\right) -\\beta \\log ( \\rho_{mt+1} ) + \\beta \\gamma $ \\vspace{1ex}",
   x2 = "$\\frac{\\beta}{2}(h_{mt+1})^2$",
   h = "$h_{mt+1}$"
   )
@@ -1562,7 +1547,7 @@ etable(
     tabular = "X",
     style.tex = style.tex(
       model.title = "",
-      yesNo = c("$\\checkmark$", "--"),
+      yesNo = c("$\\checkmark$", ""),
       fontsize = "normalsize",
       model.format = "\\hspace{1em}"
       ),
@@ -1570,4 +1555,37 @@ etable(
     )
 ```
 
+### PPM data for extensive margin
 
+```{r}
+etable(
+  list(
+    OLS = ppm_ols[[2]], 
+    IV = ppm_iv[[2]]
+    ),
+  fitstat = ~ n + f,
+  digits = 4,
+  group = list(
+      Temperature = c("tmmn_min", "tmmx_max", "tmmn_mean", "tmmx_mean"),
+      `Past. Suit.` = "si_median",
+      `Mkt. Acc.` = "ma_norm",
+      Precipitation = "pr_tdif"
+      ),
+  dict = coef_rename,
+  # output
+  file = "../Outputs/Tables/ext_ppm.tex",
+  replace = T,
+  
+  # latex configurations
+  label = "tab:ext_ppm",
+  tabular = "X",
+  style.tex = style.tex(
+    model.title = "",
+    yesNo = "$\\checkmark$",
+    fontsize = "normalsize",
+    model.format = "\\hspace{1em}"
+    ),
+  title = "Extensive margin regression with survey data",
+  headers = c("OLS", "IV")
+  )
+```
