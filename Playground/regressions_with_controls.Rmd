@@ -222,7 +222,7 @@ iv <- feols(
   + tmmn_min + tmmx_max
   + tmmn_mean + tmmx_mean
 
-  | sw(1,main_biome, code_state)
+  | sw(1,main_biome, code_state, code_amc)
   
   | local_price + local_price_2 + high_share ~ ssiv + ssiv_2 + pr,
   
@@ -320,6 +320,33 @@ etable(
   extralines = ~ phi_ols
 )
 
+```
+
+## Poisson
+
+```{r}
+pois <- feglm(
+  data = int_data,
+  h ~
+    local_price
+  + local_price_2
+  + high_share
+  + ma_norm
+  + si_median
+  + year
+  + tmmn_min
+  + tmmx_max 
+  + tmmn_mean
+  + tmmx_mean
+  + high_share
+  
+  | sw(1, main_biome, code_state, code_amc),
+  panel.id = c("code_amc", "year"),
+  cluster = "code_amc",
+  family = "poisson"  # Specifies Poisson regression
+)
+
+etable(pois)
 ```
 
 
@@ -477,7 +504,8 @@ ext_iv <- feols(
     
   | sw(1,main_biome, code_state)
   | high_share_tdif ~ pr,
-
+  
+  panel.id = c("code_amc","year"),
   cluster = "code_amc"
   )
 
@@ -504,6 +532,9 @@ ext_ols <- feols(
   + pr_tdif
     
   | sw(1,main_biome, code_state),
+  
+  
+  panel.id = c("code_amc","year"),
   cluster = "code_amc"
   )
 
@@ -654,7 +685,10 @@ ppm_ols <- feols(
   + pr_tdif
   
   | sw(1, main_biome, code_state),
-  cluster = "code_amc"
+  
+  
+  panel.id = c("code_amc","year"),
+  cluster = "code_amc",
   )
 
 
@@ -679,6 +713,9 @@ ppm_iv <- feols(
  
   | sw(1, main_biome, code_state)
   | high_share_tdif ~ pr,
+  
+  
+  panel.id = c("code_amc","year"),
   cluster = "code_amc"
   )
 
@@ -704,127 +741,42 @@ To calculate a counterfactual, I'll choose a pair of models of each margin. Then
 
 I calculate the ext margin model for the predicted headcount and for the counterfactual. Probability for the following year remains the same because it is forward looking.
 
-
+|> 
+  # tranform to tibble
+  as_tibble() |> 
+  # increase pasture quality
+  mutate(
+    high_share = if_else(
+      high_share > min_high_share, 
+      high_share, 
+      min_high_share)
+    ) |> 
+  # return to matrix
+  as.matrix()
+  
 ## Main scenarios
 
 ```{r}
-###############################
-########## Intensive margin ###
-###############################
+min_high_share = 0
 
-# increase pasture quality to at least some%
-min_high_share = 0.9
+coefs = coef(int_mod)
 
-int_cf_data_recovery <- int_data |> 
-  mutate(
-    high_share = if_else(
-      high_share > min_high_share, 
-      high_share, 
-      min_high_share),
-    
-    .before = h
-  )
+design_matrix = model.matrix(int_mod) 
 
-# join counterfactuals with dataframe 
-int_cf <- int_data |> 
-  mutate(
-    h_hat = fitted(int_mod),
-    h_hat1 = predict(int_mod),
-    h_hat2 = predict(int_mod, newdata = int_data),
-    h_recovery = predict(int_mod, newdata = int_cf_data_recovery),
-    high_share_old = high_share,
-    high_share_cf = if_else(
-      high_share > min_high_share, 
-      high_share, 
-      min_high_share),
-    
-    .after = h
-  )
+x = as.vector(design_matrix %*% coefs)
 
-a <- data.frame(int_data == int_cf_data_recovery)
+fixed_effects = predict(int_mod, fixef = T)$main_biome |> unname()
 
-################################
-######### Extensive margin #####
-################################
-
-# Estimated
-ext_cf_data_hat <- ext_data |> 
-  left_join(
-    int_cf |> select(code_amc, year, h_hat, h_recovery),
-    
-    by = c("code_amc", "year")
-  ) |> 
-  mutate(
-    x2 = 0.45*(h_hat)**2
-  )
-
-# Pasture recovery
-ext_cf_data_recovery <- ext_cf_data_hat |> 
-  mutate(
-    # square density
-    x2 = 0.45*(h_recovery)**2,
-    
-    # increase share of high quality
-    high_share = if_else(
-      high_share > min_high_share, 
-      high_share, 
-      min_high_share),
-  )
-
-# Maximum potential from pasture recovery
-# ignoring the effect of increasing productivity
-# to separate the two opposing effects
-ext_cf_data_potential <- ext_cf_data_hat |> 
-  mutate(
-    # increase share of high quality
-    high_share = if_else(
-      high_share > min_high_share, 
-      high_share, 
-      min_high_share),
-  )
-
-# join counterfactuals with dataframe
-ext_cf <- ext_data |> 
-  mutate(
-    # predicted
-    y_hat = predict(ext_mod, newdata = ext_cf_data_hat),
-    # pasture recovery
-    y_recovery = predict(ext_mod, newdata = ext_cf_data_recovery),
-    # maximum potential
-    y_potential = predict(ext_mod, newdata = ext_cf_data_potential)
-    
-  )
-
-##########################################
-########## calculate new probabilities ###
-##########################################
-
-logit = \(x) exp(x)/(1+exp(x))
-
-#ext_cf_final <- 
-  
-ext_cf |> 
-  mutate(
-    rho_hat = logit(
-      y_hat + beta*log(rho_2) - beta*gamma
-      ),
-    
-    rho_recovery = logit(
-      y_recovery + beta*log(rho_2) - beta*gamma
-      ),
-    
-    rho_potential = logit(
-      y_potential + beta*log(rho_2) - beta*gamma
-      )
-  ) |> 
-  summarise(
-    real = sum(rho_1*natural),
-    expected = sum(rho_hat*natural),
-    recovery = sum(rho_recovery*natural),
-    potential = sum(rho_potential*natural)
-  )
-
+y_recovery = x + fixed_effects
 ```
+
+```{r}
+a <- model.matrix(int_mod) |> head(1) * coefs
+
+predict(int_mod, newdata = int_data)
+```
+
+
 
 ## Carbon tax
 
@@ -869,9 +821,6 @@ ext_data |>
   View()
 
 
-fixef(ext_mod)$main_biome
-
-model.matrix(ext_mod, type = "fixef") |> head()
 ```
 
 
