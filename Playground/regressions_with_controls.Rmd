@@ -767,10 +767,22 @@ I calculate the ext margin model for the predicted headcount and for the counter
 
 ## CF database
 
-I construct a database for the extensive margin, where I also get results from 2007 and 2018, using PPM data to expand the series one year ahead. 
+I construct a database for the extensive margin, where I also get results from 2007 and 2018, using PPM data to expand the series one year ahead. This dataframe needs to be an intersection of `ext_data` and `int_data`, expanded one year ahead. Before creating the main dataframe, I create an identifier with the code_amc from the int_margin dataframe and the years extended by one. 
 
 ```{r}
-ext_data_complete |>
+int_data_identifier <- int_data |> 
+  select(code_amc, year) |> 
+  mutate(year_2 = year + 1) |> 
+  pivot_longer(
+    cols = c(year, year_2),
+    names_to = NULL,
+    values_to = "year"
+  )
+```
+
+
+```{r}
+ext_cf <- ext_data_complete |>
   # remove columns that will be changed
   select(
     - c(main_biome, cattle_heads)
@@ -812,14 +824,34 @@ ext_data_complete |>
          rho_1 != 0 & 
          rho_1 != 1 &
          rho_2 != 0)
-  )
+  ) |> 
+  # recalculate main variables
+  mutate(
+    h = cattle_heads_big/area_amc,
+    x2 = 0.45*(h)**2,
+    y = log(rho_1/(1-rho_1)) - beta* log(rho_2) + beta*gamma
+  ) |> 
+  # fill ma_norm
+  group_by(
+    code_amc
+  ) |> 
+  fill(
+    ma_norm, 
+    .direction = "down"
+  ) |> 
+  ungroup(
+  ) |> 
+  # intersect with the identifier from intensive margin data
+  semi_join(
+    int_data_identifier,
+    by = c("code_amc", "year")
+  ) 
 ```
 
 
 ## Results
 
 ```{r}
-
 min_high_share <- 1
 
 recovery_counterfactual(
@@ -839,8 +871,7 @@ recovery_counterfactual <- function(
     int_mod, 
     ext_mod, 
     int_data, 
-    ext_data, 
-    ext_data_complete, 
+    ext_cf, 
     min_high_share) {
   
   #################### Intensive Margin #################
