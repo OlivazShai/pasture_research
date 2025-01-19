@@ -81,7 +81,8 @@ recovery_counterfactual_2 <- function(
         .default = NA),
       
       .after = high_share_tdif
-    ) |> 
+    )|> 
+    # join with intensive margin data
     left_join(
       int_cf_recovery_clean,
       by = c("code_amc", "year")
@@ -99,7 +100,7 @@ recovery_counterfactual_2 <- function(
   
   
   # Effective = takes into account the increase in x2 from the intensive margin
-  ext_cf_recovery_effective <- ext_cf_recovery_potential |> 
+  ext_cf_recovery_effective <- ext_cf_recovery_potential |>  
     # calculates predicted x2
     mutate(
       x2 = case_when(
@@ -114,16 +115,16 @@ recovery_counterfactual_2 <- function(
   # Append to data
   ext_cf_recovery_clean <- ext_cf |>
     select(
-      code_amc, year, rho_1, rho_2, rho_3, natural
+      code_amc, year, rho_1, rho_2, rho_3, natural, biomass_density
     ) |> 
     mutate(
       # predicted from extensive margin
       y_e = predict(ext_mod, newdata = ext_cf),
       # predicted
       y_hat = predict(ext_mod, newdata = ext_cf_predicted),
-      # pasture recovery
-      y_potential = predict(ext_mod, newdata = ext_cf_recovery_potential),
       # maximum potential
+      y_potential = predict(ext_mod, newdata = ext_cf_recovery_potential),
+      # actual effect
       y_effective = predict(ext_mod, newdata = ext_cf_recovery_effective)
     )
   
@@ -133,7 +134,7 @@ recovery_counterfactual_2 <- function(
   
   
   
-  a <- ext_cf_recovery_clean |> 
+  dynamic <- ext_cf_recovery_clean |> 
     # year t+1
     mutate(
       across(
@@ -155,7 +156,7 @@ recovery_counterfactual_2 <- function(
       )
     )
   
-  b <- ext_cf_recovery_clean |> 
+  static <- ext_cf_recovery_clean |> 
     # year t+1
     mutate(
       across(
@@ -166,38 +167,48 @@ recovery_counterfactual_2 <- function(
     )
   
   
-  
-  
-  result_a <- a |>
+  result_dynamic <- dynamic |>
     filter(
       year %in% c(2006, 2017)
     ) |> 
     summarise(
+      # In converted area
       real = sum(rho_1*natural),
       e = sum(rho_y_e*natural),
       hat = sum(rho_y_hat*natural),
       effective = sum(rho_y_effective*natural),
-      potential = sum(rho_y_potential*natural)
+      potential = sum(rho_y_potential*natural),
+      
+      # In CO2 emissions
+      hat_co2 = sum(rho_y_hat*natural*biomass_density)/ 10**9,
+      effective_co2 = sum(rho_y_effective*natural*biomass_density)/ 10**9,
+      potential_co2 = sum(rho_y_potential*natural*biomass_density)/ 10**9
     )
   
-  result_b <- b |>
+  result_static <- static |>
     filter(
       year %in% c(2006, 2017)
     ) |> 
     summarise(
+      # In converted area
       real = sum(rho_1*natural),
       e = sum(rho_y_e*natural),
       hat = sum(rho_y_hat*natural),
       effective = sum(rho_y_effective*natural),
-      potential = sum(rho_y_potential*natural)
+      potential = sum(rho_y_potential*natural),
+      
+      # In CO2 emissions measured in GIGATON (E+9)
+      hat_co2 = sum(rho_y_hat*natural*biomass_density) / 10**9,
+      effective_co2 = sum(rho_y_effective*natural*biomass_density) / 10**9,
+      potential_co2 = sum(rho_y_potential*natural*biomass_density) / 10**9
     )
   
   result <- bind_rows(
     list(
-      dynamic = result_a,
-      static = result_b
+      dynamic = result_dynamic,
+      static = result_static
     ),
-    .id = "Type"
+    .id = "type"
   )
   
   return(result)
