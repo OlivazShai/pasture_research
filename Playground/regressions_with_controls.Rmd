@@ -39,6 +39,7 @@ library(purrr)
 
 # Personal functions
 source("../Functions/bulk_rds.R")
+source("../Functions/recovery_counterfactual.R")
 ```
 
 # Importing files
@@ -220,12 +221,13 @@ iv <- feols(
     ma_norm
   + si_median
   + year
-  + tmmn_min + tmmx_max
+#  + tmmn_min + tmmx_max
   + tmmn_mean + tmmx_mean
+  + tc_median
 
   | sw(1,main_biome, code_state, code_amc)
   
-  | local_price + local_price_2 + high_share ~ ssiv + ssiv_2 + pr,
+  | local_price + local_price_2 + high_share ~ ssiv + ssiv_2 + pdsi_min,
   
   panel.id = c("code_amc","year"),
   cluster = "code_amc"
@@ -406,7 +408,7 @@ ext_data_complete <- transition_agg |>
   ) |>
   ############# include controls
   left_join(
-    tc_by_amc |> select(code_amc, tc_mean, tc_median),
+    tc_by_amc, #|> select(code_amc, tc_mean, tc_median),
     by = "code_amc"
   ) |> 
   left_join(
@@ -414,7 +416,7 @@ ext_data_complete <- transition_agg |>
     by = c("code_amc", "year")
   ) |> 
   left_join(
-    si_by_amc |> select(code_amc, si_mean, si_median),
+    si_by_amc, #|> select(code_amc, si_mean, si_median),
     by = "code_amc"
   ) |>
   ############ include land use
@@ -457,7 +459,8 @@ ext_data_complete <- transition_agg |>
   mutate(
     .by = "code_amc",
     
-    pr_lag = dplyr::lag(pr),
+    pr_lag = lag(pr),
+    ssiv_lag = lag(ssiv),
     
     y = log(rho_1/(1-rho_1)) - beta* log(rho_2) + beta*gamma,
     
@@ -492,14 +495,6 @@ ext_data <- ext_data_complete |>
   ) 
 ```
 
-```{r}
-|> 
-  semi_join(
-    int_data,
-    by = c("code_amc", "year")
-  )
-```
-
 
 ## IV with Census
 
@@ -513,12 +508,13 @@ ext_iv <- feols(
   + si_median
   + biomass_density
   + year_tdif
-  + tmmn_min_tdif + tmmx_max_tdif 
+#  + tmmn_min_tdif + tmmx_max_tdif 
   + tmmn_mean_tdif + tmmx_mean_tdif
-#  + pr_tdif
+#  + pr_tdif 
+  + tc_median
     
   | sw(1,main_biome, code_state)
-  | high_share_tdif ~ pr,
+  | high_share_tdif ~ pdsi_min,
   
   panel.id = c("code_amc","year"),
   cluster = "code_amc"
@@ -542,10 +538,10 @@ ext_ols <- feols(
   + si_median
   + biomass_density
   + year_tdif
-  + tmmn_min_tdif + tmmx_max_tdif 
+#  + tmmn_min_tdif + tmmx_max_tdif 
   + tmmn_mean_tdif + tmmx_mean_tdif
 #  + pr_tdif
-    
+
   | sw(1,main_biome, code_state),
   
   
@@ -673,7 +669,7 @@ ext_ppm_complete <- transition_agg |>
     
     x2 = 0.45*(cattle_heads/area_amc)**2,
     
-    x5 = 0.45*(cattle_heads/pasture)**2,
+    x3 = 0.45*(cattle_heads/pasture)**2,
     
     year_tdif = (beta + (beta - 1) * year)
   ) 
@@ -726,14 +722,15 @@ etable(
 ```{r}
 ppm_iv <- feols(
   data = ext_ppm,
-  y ~ x2
+  y ~ 
+    x2
   + biomass_density
   + ma_norm
   + si_median
   + year_tdif
   + tmmn_min_tdif + tmmx_max_tdif 
   + tmmn_mean_tdif + tmmx_mean_tdif
-#  + pr_tdif
+  + pr_tdif
  
   | sw(1, main_biome, code_state)
   | high_share_tdif ~ pr,
@@ -763,7 +760,7 @@ ext_mod <- ext_iv[[2]]
 
 To calculate a counterfactual, I'll choose a pair of models of each margin. Then, I predict the int margin model with real data, and compare the prediction to when a I make a variation in the data.
 
-I calculate the ext margin model for the predicted headcount and for the counterfactual. Probability for the following year remains the same because it is forward looking.
+I calculate the ext margin model for the predicted headcount and for the counterfactual. Probability for the year two-ahead remains the same because it is forward looking.
 
 ## CF database
 
@@ -800,11 +797,15 @@ ext_cf <- ext_data_complete |>
     delta_cattle_heads = cattle_heads/lag(cattle_heads),
     
     cattle_heads_big = if_else(
+      # if year after census
       year %in% c(2007, 2018),
+      # use PPM ch growth
       lag(cattle_heads_big) * delta_cattle_heads,
+      # else keep usual ch
       cattle_heads_big),
     
-    high_share = lead(high_share)
+    high_share_2 = lead(high_share),
+    .before = "high_share"
     ) |>
   # filter for census years and the following year
   filter(
@@ -851,177 +852,62 @@ ext_cf <- ext_data_complete |>
 
 ## Results
 
+
 ```{r}
 min_high_share <- 1
 
 recovery_counterfactual(
   int_mod, 
   ext_mod, 
-  int_data, 
-  ext_data, 
-  ext_data_complete, 
-  min_high_share
+  int_data,
+  ext_cf, 
+  min_high_share,
+  beta = beta
 )
 ```
 
 
-
 ```{r}
-recovery_counterfactual <- function(
+x <- tibble(i = double(), result = double())
+
+for (i in seq(0,1,0.01)) {
+  result <- recovery_counterfactual(
     int_mod, 
     ext_mod, 
-    int_data, 
+    int_data,
     ext_cf, 
-    min_high_share) {
-  
-  #################### Intensive Margin #################
-  
-  # New data with recovery in high share
-  int_cf_data_recovery <- int_data |> 
-    mutate(
-      high_share = if_else(
-        high_share > min_high_share, 
-        high_share, 
-        min_high_share)
-    )
-  
-  # Append to data
-  int_cf_data_recovery_clean <- int_data |>
-    select(
-      code_amc,
-      year
-    ) |> 
-    mutate(
-      # Predicted baseline from model coefficients
-      h_hat = predict(int_mod, newdata = int_data),
-      
-      # Predicted from counterfactual recovery
-      h_recovery = predict(int_mod, newdata = int_cf_data_recovery)
-    )
-  
-  ################## Extensive Margin #################
-  
-  # Predicted
-  ext_cf_data_predicted <- ext_data |> 
-    inner_join(
-      int_cf_data_recovery_clean,
-      by = c("code_amc", "year")
-    ) |> 
-    # remove impossible probability for rho_3
+    min_high_share = i,
+    beta = beta
+    ) |>
     filter(
-      rho_3 != 0
-    ) |> 
-    # calculates predicted x2
-    mutate(
-      x2 = 0.45*(h_hat)**2
+      type == "static"
+    ) |>
+    pull(
+      effective
     )
   
-  # Potential = disconsiders the effect on x2
-  ext_cf_data_recovery_potential_full <- ext_data_complete |> 
-    # increase high_share
-    mutate(
-      high_share = if_else(
-          # in census years and the following years
-        year %in% c(2006:2007, 2017:2018) 
-          # if high_share is less than the minimum
-        & high_share < min_high_share, 
-          # becomes min_high_share
-        min_high_share,
-          # else, keeps as usual
-        high_share
-        )
-    ) |> 
-    # recalculate time difference
-    mutate(
-      .by = "code_amc",
-      across(
-        .cols = high_share,
-        .fns = tdif,
-        .names = "{.col}_tdif")
-    ) |> 
-    ########## data cleaning  
-    # remove probability 0 and 1 (impossible log odds)
-    filter(
-      rho_1 != 0 &
-      rho_1 != 1 &
-      rho_2 != 0 &
-      rho_3 != 0
-    ) 
-  
-  
-  ext_cf_data_recovery_potential_2017 <- ext_cf_data_recovery_potential_full |> 
-    # filter to census years
-    filter(
-      year == 2006 | year == 2017
-    ) |> 
-    # remove NA
-    filter(
-      !is.na(x2)
-    ) |> 
-    # join with intensive margin counterfactual data
-    inner_join(
-      int_cf_data_recovery_clean,
-      by = c("code_amc", "year")
-    ) 
-  
-  # Effective = takes into account the increase in x2 from the intensive margin
-  ext_cf_data_recovery_effective <- ext_cf_data_recovery_potential |> 
-    mutate(
-      x2 = 0.45*(h_recovery)**2
+  x <- x |> 
+    rows_append(
+      tibble(i = i, result = result) 
     )
-  
-  # Append to data
-  ext_cf_data_recovery_clean <- ext_cf_data_predicted |>
-    select(
-      code_amc, year, rho_1, rho_2, natural
-    ) |> 
-    mutate(
-      # predicted
-      y_hat = predict(ext_mod, newdata = ext_cf_data_predicted),
-      # pasture recovery
-      y_potential = predict(ext_mod, newdata = ext_cf_data_recovery_potential),
-      # maximum potential
-      y_effective = predict(ext_mod, newdata = ext_cf_data_recovery_effective)
-      
-    )
-  
-  ########## calculate new probabilities ###########
-  
-  logit = \(x) exp(x)/(1+exp(x))
-
-  ext_cf <- ext_cf_data_recovery_clean |> 
-    mutate(
-      rho_hat = logit(
-        y_hat + 0.9*log(rho_2) - 0.9*gamma
-        ),
-      
-      rho_effective = logit(
-        y_effective + 0.9*log(rho_2) - 0.9*gamma
-        ),
-      
-      rho_potential = logit(
-        y_potential + 0.9*log(rho_2) - 0.9*gamma
-        )
-    ) |> 
-    summarise(
-      real = sum(rho_1*natural),
-      expected = sum(rho_hat*natural),
-      effective = sum(rho_effective*natural),
-      potential = sum(rho_potential*natural)
-    )
-  
-  return(ext_cf)
 }
 
+print(x)
 
+```
 
+```{r}
+ggplot(x, aes(x = i, y = result)) +
+  geom_line() +
+  labs(x = "pasture quality", y = "deforestation") +
+  theme_minimal()
 ```
 
 
 ## Carbon tax
 
 ```{r}
-counterfactual_prediction <- function(model, new_alpha_b) {
+tax_counterfactual <- function(model, new_alpha_b) {
   # Extract original coefficients
   coefs <- coef(model)
   
