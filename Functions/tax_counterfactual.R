@@ -16,14 +16,14 @@ tax_counterfactual <- function(
   # Replace the coefficient of biomass_density with new_alpha_b
   coefs["biomass_density"] <- - tax * alpha_p
   
-  # Extract the design matrix for the predictors used in the model
-  design_matrix <- model.matrix(ext_mod)
+  # Extract the design matrix for the NEW data
+  design_matrix <- model.matrix(ext_mod, data = ext_cf)
   
   # Calculate the new predictions (excluding fixed effects)
   y_biomass <- as.vector(design_matrix %*% coefs)
   
   # Add the fixed effects back to the predictions
-  fixed_effects <- predict(ext_mod, fixef = TRUE)$main_biome
+  fixed_effects <- predict(ext_mod, newdata = ext_cf, fixef = TRUE)$main_biome
   y_biomass <- y_biomass + fixed_effects
   
   # Return the predictions
