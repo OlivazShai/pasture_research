@@ -858,7 +858,7 @@ ext_cf <- ext_data_complete |>
 ```
 
 
-## Results
+## Pasture recovery
 
 
 ```{r}
@@ -928,28 +928,30 @@ ggplot(x, aes(x = i, y = result)) +
   theme_minimal()
 ```
 
-
 ## Carbon tax
 
 ```{r}
-tax_counterfactual <- function(model, tax) {
+tax_counterfactual <- function(int_mod, ext_mod, tax) {
+  # import datructural parameter calculation
+  source("../Functions/structural_parameters.R")
+  
   # Extract original coefficients
-  coefs <- coef(model)
+  coefs <- coef(ext_mod)
   
   # calculate alpha_p
   alpha_p = calculate_structural_params(int_mod, ext_mod)$Value[3]
   
   # Replace the coefficient of biomass_density with new_alpha_b
-  coefs["biomass_density"] <- -tax * alpha_p
+  coefs["biomass_density"] <- - tax * alpha_p
   
   # Extract the design matrix for the predictors used in the model
-  design_matrix <- model.matrix(model)
+  design_matrix <- model.matrix(ext_mod)
   
   # Calculate the new predictions (excluding fixed effects)
   y_biomass <- as.vector(design_matrix %*% coefs)
   
   # Add the fixed effects back to the predictions
-  fixed_effects <- predict(model, fixef = TRUE)$main_biome
+  fixed_effects <- predict(ext_mod, fixef = TRUE)$main_biome
   y_biomass <- y_biomass + fixed_effects
   
   # Return the predictions
@@ -962,7 +964,7 @@ Testing:
 ```{r}
 ext_data |> 
   mutate(
-    y_biomass = tax_counterfactual(ext_mod, tax = 3),
+    y_biomass = tax_counterfactual(int_mod, ext_mod, tax = 30),
     y_hat = predict(ext_mod, newdata = ext_data)
   ) |> 
   select(
@@ -983,8 +985,6 @@ ext_data |>
     hat = sum(rho_y_hat*natural),
     biomass = sum(rho_y_biomass*natural)
   )
-
-
 ```
 
 # Maps
@@ -1479,7 +1479,8 @@ remove(get_f_stats, coef_rename, model_parameters, extra_rows, header, model_lis
 In this section, I will use the preferred empirical exercise to recover the structural parameters that arise from the model.I first define a function to calculate the structural parameters, then run and export as latex table.
 
 ```{r} 
-calculate_structural_params(int_mod, ext_mod) |> 
+calculate_structural_params(int_mod, ext_mod) |>
+  aggregate_structural_params() |> 
   kbl(
     digits = c(4,4,2),
     
