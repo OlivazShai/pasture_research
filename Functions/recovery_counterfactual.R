@@ -81,15 +81,26 @@ recovery_counterfactual <- function(
         .default = NA),
       
       .after = high_share_tdif
-    )
-  
-  
-  # Effective = takes into account the increase in x2 from the intensive margin
-  ext_cf_recovery_effective <- ext_cf_recovery_potential |> 
+    )|> 
+    # join with intensive margin data
     left_join(
       int_cf_recovery_clean,
       by = c("code_amc", "year")
     ) |> 
+    # calculates predicted x2
+    mutate(
+      x2 = case_when(
+        # census year
+        year %in% c(2006,2017) ~ 0.45*(h_hat)**2,
+        
+        # next year
+        year %in% c(2007,2018) ~ 0.45*(h)**2,
+        .default = NA)
+    )
+  
+  
+  # Effective = takes into account the increase in x2 from the intensive margin
+  ext_cf_recovery_effective <- ext_cf_recovery_potential |>  
     # calculates predicted x2
     mutate(
       x2 = case_when(
@@ -111,9 +122,9 @@ recovery_counterfactual <- function(
       y_e = predict(ext_mod, newdata = ext_cf),
       # predicted
       y_hat = predict(ext_mod, newdata = ext_cf_predicted),
-      # pasture recovery
-      y_potential = predict(ext_mod, newdata = ext_cf_recovery_potential),
       # maximum potential
+      y_potential = predict(ext_mod, newdata = ext_cf_recovery_potential),
+      # actual effect
       y_effective = predict(ext_mod, newdata = ext_cf_recovery_effective)
     )
   
@@ -169,9 +180,9 @@ recovery_counterfactual <- function(
       potential = sum(rho_y_potential*natural),
       
       # In CO2 emissions
-      hat_co2 = sum(rho_y_hat*natural*biomass_density),
-      effective_co2 = sum(rho_y_effective*natural*biomass_density),
-      potential_co2 = sum(rho_y_potential*natural*biomass_density)
+      hat_co2 = sum(rho_y_hat*natural*biomass_density)/ 10**9,
+      effective_co2 = sum(rho_y_effective*natural*biomass_density)/ 10**9,
+      potential_co2 = sum(rho_y_potential*natural*biomass_density)/ 10**9
     )
   
   result_static <- static |>
@@ -186,10 +197,10 @@ recovery_counterfactual <- function(
       effective = sum(rho_y_effective*natural),
       potential = sum(rho_y_potential*natural),
       
-      # In CO2 emissions
-      hat_co2 = sum(rho_y_hat*natural*biomass_density),
-      effective_co2 = sum(rho_y_effective*natural*biomass_density),
-      potential_co2 = sum(rho_y_potential*natural*biomass_density)
+      # In CO2 emissions measured in GIGATON (E+9)
+      hat_co2 = sum(rho_y_hat*natural*biomass_density) / 10**9,
+      effective_co2 = sum(rho_y_effective*natural*biomass_density) / 10**9,
+      potential_co2 = sum(rho_y_potential*natural*biomass_density) / 10**9
     )
   
   result <- bind_rows(
