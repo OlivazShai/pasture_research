@@ -880,7 +880,10 @@ x <- tibble(
   i = double(), 
   hat = double(),
   effective = double(),
-  potential = double()
+  potential = double(),
+  hat_co2 = double(),
+  effective_co2 = double(),
+  potential_co2 = double(),
   )
 
 for (i in seq(0, 1, 0.01)) {
@@ -898,7 +901,10 @@ for (i in seq(0, 1, 0.01)) {
     select(
       hat,
       effective,
-      potential
+      potential,
+      hat_co2,
+      effective_co2,
+      potential_co2
     )
   
   x <- x |> 
@@ -907,16 +913,25 @@ for (i in seq(0, 1, 0.01)) {
     )
 }
 
-x |> 
+recovery_results <- x |> 
   mutate(
+    # land area
     def_disincentive = potential - hat,
     def_incentive = effective - potential,
     def_net = hat - effective,
     
     def_disincentive_pc = def_disincentive/hat,
-    def_incentive_pc = effective - potential,
-    def_net_pc = hat - effective,
+    def_incentive_pc = def_incentive/hat,
+    def_net_pc = def_net/hat,
     
+    # carbon
+    co2_disincentive = potential_co2 - hat_co2,
+    co2_incentive = effective_co2 - potential_co2,
+    co2_net = hat_co2 - effective_co2,
+    
+    co2_disincentive_pc = co2_disincentive/hat_co2,
+    co2_incentive_pc = co2_incentive/hat_co2,
+    co2_net_pc = co2_net/hat_co2
   )
 
 ```
@@ -930,42 +945,13 @@ ggplot(x, aes(x = i, y = result)) +
 
 ## Carbon tax
 
-```{r}
-tax_counterfactual <- function(int_mod, ext_mod, tax) {
-  # import datructural parameter calculation
-  source("../Functions/structural_parameters.R")
-  
-  # Extract original coefficients
-  coefs <- coef(ext_mod)
-  
-  # calculate alpha_p
-  alpha_p = calculate_structural_params(int_mod, ext_mod)$Value[3]
-  
-  # Replace the coefficient of biomass_density with new_alpha_b
-  coefs["biomass_density"] <- - tax * alpha_p
-  
-  # Extract the design matrix for the predictors used in the model
-  design_matrix <- model.matrix(ext_mod)
-  
-  # Calculate the new predictions (excluding fixed effects)
-  y_biomass <- as.vector(design_matrix %*% coefs)
-  
-  # Add the fixed effects back to the predictions
-  fixed_effects <- predict(ext_mod, fixef = TRUE)$main_biome
-  y_biomass <- y_biomass + fixed_effects
-  
-  # Return the predictions
-  return(y_biomass)
-}
-```
-
-Testing:
+Testing
 
 ```{r}
-ext_data |> 
+ext_cf |> 
   mutate(
-    y_biomass = tax_counterfactual(int_mod, ext_mod, tax = 30),
-    y_hat = predict(ext_mod, newdata = ext_data)
+    y_biomass = tax_counterfactual(int_mod, ext_mod, ext_cf, tax = 30),
+    y_hat = predict(ext_mod, newdata = ext_cf)
   ) |> 
   select(
     code_amc, year, rho_1, rho_2, y_biomass, y_hat, natural
