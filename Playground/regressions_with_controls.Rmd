@@ -40,6 +40,7 @@ library(purrr)
 # Personal functions
 source("../Functions/bulk_rds.R")
 source("../Functions/recovery_counterfactual.R")
+source("../Functions/structural_parameters.R")
 ```
 
 # Importing files
@@ -208,6 +209,11 @@ int_data <- left_join(
     terraclimate,
     
     by = c("code_amc", "year")
+  ) |> 
+  ########### remove NA in transport cost
+  # it is NA for Conde - PB
+  filter(
+    !is.na(tc_median)
   )
 ```
 
@@ -534,13 +540,14 @@ ext_ols <- feols(
   y ~ 
   x2
   + high_share_tdif
+  + biomass_density
   + ma_norm
   + si_median
-  + biomass_density
   + year_tdif
 #  + tmmn_min_tdif + tmmx_max_tdif 
   + tmmn_mean_tdif + tmmx_mean_tdif
 #  + pr_tdif
+  + tc_median
 
   | sw(1,main_biome, code_state),
   
@@ -731,9 +738,10 @@ ppm_iv <- feols(
   + tmmn_min_tdif + tmmx_max_tdif 
   + tmmn_mean_tdif + tmmx_mean_tdif
   + pr_tdif
+  + tc_median
  
   | sw(1, main_biome, code_state)
-  | high_share_tdif ~ pr,
+  | high_share_tdif ~ pdsi_min,
   
   
   panel.id = c("code_amc","year"),
@@ -868,9 +876,14 @@ recovery_counterfactual(
 
 
 ```{r}
-x <- tibble(i = double(), result = double())
+x <- tibble(
+  i = double(), 
+  hat = double(),
+  effective = double(),
+  potential = double()
+  )
 
-for (i in seq(0,1,0.01)) {
+for (i in seq(0, 1, 0.01)) {
   result <- recovery_counterfactual(
     int_mod, 
     ext_mod, 
@@ -882,17 +895,29 @@ for (i in seq(0,1,0.01)) {
     filter(
       type == "static"
     ) |>
-    pull(
-      effective
+    select(
+      hat,
+      effective,
+      potential
     )
   
   x <- x |> 
     rows_append(
-      tibble(i = i, result = result) 
+      tibble(i = i, result) 
     )
 }
 
-print(x)
+x |> 
+  mutate(
+    def_disincentive = potential - hat,
+    def_incentive = effective - potential,
+    def_net = hat - effective,
+    
+    def_disincentive_pc = def_disincentive/hat,
+    def_incentive_pc = effective - potential,
+    def_net_pc = hat - effective,
+    
+  )
 
 ```
 
@@ -907,50 +932,60 @@ ggplot(x, aes(x = i, y = result)) +
 ## Carbon tax
 
 ```{r}
-tax_counterfactual <- function(model, new_alpha_b) {
+tax_counterfactual <- function(model, tax) {
   # Extract original coefficients
   coefs <- coef(model)
   
+  # calculate alpha_p
+  alpha_p = calculate_structural_params(int_mod, ext_mod)$Value[3]
+  
   # Replace the coefficient of biomass_density with new_alpha_b
-  coefs["biomass_density"] <- new_alpha_b
+  coefs["biomass_density"] <- -tax * alpha_p
   
   # Extract the design matrix for the predictors used in the model
-  design_matrix <- fixest::model.matrix(model)
+  design_matrix <- model.matrix(model)
   
   # Calculate the new predictions (excluding fixed effects)
   y_biomass <- as.vector(design_matrix %*% coefs)
   
   # Add the fixed effects back to the predictions
-  fixed_effects <- fixef(model)$main_biome
-  fe_mapping <- attr(fixef(model), "fixef_vars")$main_biome
-  y_biomass <- y_biomass + fixed_effects[fe_mapping]
+  fixed_effects <- predict(model, fixef = TRUE)$main_biome
+  y_biomass <- y_biomass + fixed_effects
   
   # Return the predictions
   return(y_biomass)
 }
-
 ```
 
 Testing:
 
 ```{r}
-alpha_b <- coef(ext_mod)["biomass_density"]
-new_alpha_b <- -0.10
-
 ext_data |> 
   mutate(
-    y_biomass = counterfactual_prediction(ext_mod, alpha_b)
+    y_biomass = tax_counterfactual(ext_mod, tax = 3),
+    y_hat = predict(ext_mod, newdata = ext_data)
   ) |> 
   select(
-    code_amc, year, main_biome, y, y_biomass
+    code_amc, year, rho_1, rho_2, y_biomass, y_hat, natural
   ) |> 
-  View()
+  mutate(
+    across(
+      .cols = c(y_biomass, y_hat),
+      .fns = ~ logit(.x - 0.9*gamma + 0.9*log(rho_2)),
+      .names = "rho_{.col}"
+    )
+  ) |> 
+  filter(
+      year %in% c(2006, 2017)
+    ) |> 
+  summarise(
+    real = sum(rho_1*natural),
+    hat = sum(rho_y_hat*natural),
+    biomass = sum(rho_y_biomass*natural)
+  )
 
 
 ```
-
-
-
 
 # Maps
 
@@ -1442,81 +1477,6 @@ remove(get_f_stats, coef_rename, model_parameters, extra_rows, header, model_lis
 ## Structural parameters
 
 In this section, I will use the preferred empirical exercise to recover the structural parameters that arise from the model.I first define a function to calculate the structural parameters, then run and export as latex table.
-
-```{r}
-calculate_structural_params <- function(int_model, ext_model) {
-  # Extract coefficients and fixed effects from intensive margin
-  int_coefs <- coef(int_model)
-  int_fixed_effects <- fixef(int_model)$main_biome
-
-  # Calculate intensive margin parameters
-  alpha_p_delta <- - beta * int_coefs["fit_local_price"]
-  phi <- (int_coefs["fit_local_price_2"] / alpha_p_delta) - 1
-
-  # Extract coefficients and fixed effects from extensive margin
-  ext_coefs <- coef(ext_model)
-  ext_fixed_effects <- fixef(ext_model)$main_biome
-
-  # Calculate extensive margin parameters
-  delta <- ext_coefs["x2"]
-  alpha_p <- alpha_p_delta * delta
-  alpha_b <- - ext_coefs["biomass_density"]
-  gamma_pasture_e <- ext_coefs["fit_high_share_tdif"]
-  gamma_year_e <- ext_coefs["year_tdif"]
-
-  # Back to intensive margin
-  gamma_pasture <- - int_coefs["fit_high_share"] * delta
-  gamma_year <- - int_coefs["year"] * delta
-
-  # fixed effects
-  biomes = c(
-    "amazonia", "caatinga", "cerrado", "mata atlantica", "pampa", "pantanal"
-    )
-  
-  gamma_biome <- map_vec(int_fixed_effects, function(fe) - fe * delta) # multiply int mar FE by delta
-  names(gamma_biome) <- paste("$\\gamma_g: g =$", biomes)
-                        
-  gamma_biome_e <- map_vec(ext_fixed_effects, function(fe) fe / (beta - 1)) # divide by beta - 1
-  names(gamma_biome_e) <- paste("$\\gamma_g^e: g =$", biomes)
-                          
-  # Combine parameters into a data frame
-  result <- data.frame(
-    Parameter = c(
-      "$\\phi$", "$\\delta$", "$\\alpha_p$", "$\\alpha_b$",
-      "$\\gamma_{pasture}$", 
-      "$\\gamma_t$",
-      names(gamma_biome), 
-      "$\\gamma_{pasture}^e$",
-      "$\\gamma_t^e$",
-      names(gamma_biome_e)
-      ),
-    
-    Value = c(
-      phi, delta, alpha_p, alpha_b,
-      gamma_pasture, gamma_year,
-      unname(gamma_biome), 
-      gamma_pasture_e,
-      gamma_year_e,
-      unname(gamma_biome_e) 
-      ),
-    
-    # Add column with parameters divided by alpha_p
-    Scaled = c(
-      NA,
-      NA,
-      NA,
-      map_vec(c(alpha_b,
-            gamma_pasture, gamma_year, unname(gamma_biome),
-            gamma_pasture_e, gamma_year_e, unname(gamma_biome_e)),
-          \(x) x / alpha_p)
-      )
-  )
-  
-  return(result)
-}
-```
-
-Running the function.
 
 ```{r} 
 calculate_structural_params(int_mod, ext_mod) |> 
