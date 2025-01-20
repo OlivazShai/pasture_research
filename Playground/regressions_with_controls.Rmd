@@ -938,17 +938,16 @@ recovery_results <- x |>
     co2_incentive_pc = co2_incentive/hat_co2,
     co2_net_pc = co2_net/hat_co2
   )
-
-rm(x)
 ```
 
 
 ## Carbon tax
 
-Testing
+Testing.
+
 ```{r}
 tax_counterfactual(int_mod,ext_mod,int_data,ext_cf,
-                               tax = 30)
+                               tax = 66)
 ```
 
 
@@ -1264,11 +1263,11 @@ recovery_results |>
 ## CF - Taxes
 
 ```{r}
-tax_results_smooth <- approx(x = tax_results$t, y = tax_results$tax_co2, n = 100) |>  as_tibble()
+tax_results_smooth <- approx(x = tax_results$t, y = tax_results$tax_co2, n = 1000) |>  as_tibble()
 
 tax_results_smooth |> 
   filter(
-    x <= 30
+    x <= 47
   ) |> 
   ggplot() +
   aes(
@@ -1276,15 +1275,18 @@ tax_results_smooth |>
     y = y
   ) +
   labs(
-    y = "Abatement",
+    y = "Co2 Emissions",
     x = "Tax rate ($ / tCO2)"
   ) +
   geom_line(
-    #linewidth = 0.8,
+    linewidth = 0.75,
     color = "grey35"
   ) +
   theme_minimal() +
   theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.major.x = element_blank(),
     axis.line = element_line(color = "grey30"),
     axis.title.x = element_text(margin = margin(t = 10)),  # Add space for x-axis label
     axis.title = element_text(face = "plain"),  # Make axis titles thinner
@@ -1300,10 +1302,34 @@ tax_results_smooth |>
 
 ```{r}
 combined <- bind_rows(
-  tax_results |> transmute(x = t, y = tax_co2)
-    
+  tax_results |> 
+    filter(
+      t <= 1
+    )|> 
+    transmute(y = sav_tax_pc, x = t, facet = "tax"),
+  recovery_results |> transmute(y = sav_net_pc, x = i, facet = "recovery")
   )
-)
+
+combined |> 
+  ggplot() +
+  aes(
+    x = x, 
+    y = y
+    ) +
+  geom_area(
+    alpha = 0.6
+    ) +
+  facet_grid(cols = vars(facet), scales = "free_x") +
+  labs(
+    x = NULL,  # Remove global x-axis title
+    y = "Y-Axis Label"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    strip.text = element_text(size = 11, face = "plain", family = "LM Sans 10"),
+    panel.grid.minor = element_blank(),
+    legend.position = "none"
+  )
 
 ```
 
