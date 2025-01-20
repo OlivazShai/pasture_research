@@ -19,6 +19,7 @@ library(tinytable)
 # Graphics
 library(ggplot2)
 library(ggpattern)
+library(scales) 
 
 # Geographic
 library(sf)
@@ -862,7 +863,7 @@ ext_cf <- ext_data_complete |>
 
 
 ```{r}
-min_high_share <- 1
+min_high_share <- 0
 
 recovery_counterfactual(
   int_mod, 
@@ -915,31 +916,32 @@ for (i in seq(0, 1, 0.01)) {
 
 recovery_results <- x |> 
   mutate(
-    # land area
-    def_disincentive = potential - hat,
-    def_incentive = effective - potential,
+    # land area SAVED
+    def_disincentive = hat - potential,
+    def_incentive = potential - effective,
     def_net = hat - effective,
     
     def_disincentive_pc = def_disincentive/hat,
     def_incentive_pc = def_incentive/hat,
     def_net_pc = def_net/hat,
     
-    # carbon
-    co2_disincentive = potential_co2 - hat_co2,
-    co2_incentive = effective_co2 - potential_co2,
+    # carbon ABATEMENT
+    co2_disincentive = hat_co2 - potential_co2,
+    co2_incentive = potential_co2 - effective_co2,
     co2_net = hat_co2 - effective_co2,
     
     co2_disincentive_pc = co2_disincentive/hat_co2,
     co2_incentive_pc = co2_incentive/hat_co2,
     co2_net_pc = co2_net/hat_co2
   )
-
 ```
 
+
+
 ```{r}
-ggplot(x, aes(x = i, y = result)) +
-  geom_line() +
-  labs(x = "pasture quality", y = "deforestation") +
+ggplot(recovery_results) +
+  geom_line(aes(y = i, x = effective_co2)) +
+  labs(y = "pasture quality", x = "emissions (Gt Co2)") +
   theme_minimal()
 ```
 
@@ -950,7 +952,7 @@ Testing
 ```{r}
 ext_cf |> 
   mutate(
-    y_biomass = tax_counterfactual(int_mod, ext_mod, ext_cf, tax = 30),
+    y_biomass = tax_counterfactual(int_mod, ext_mod, ext_cf, tax = 50),
     y_hat = predict(ext_mod, newdata = ext_cf)
   ) |> 
   select(
@@ -1140,6 +1142,77 @@ ggsave("../Outputs/Graphics/map_biomass.pdf", plot = map_biomass, device = "pdf"
 
 
 # Plots
+
+## CF - Abatement decomposition
+
+```{r}
+recovery_results |> 
+  select(
+    i,
+    co2_disincentive_pc,
+    co2_incentive_pc,
+    co2_net_pc
+  ) |> 
+  pivot_longer(
+    cols = c(
+      co2_disincentive_pc, 
+      co2_incentive_pc,
+      co2_net_pc),
+    names_to = "effect",
+    values_to = "abatement",
+    names_prefix = "co2_",
+  ) |> 
+  mutate(
+    facet = if_else(
+      effect == "net_pc",
+      "Net Abatement",
+      "Decomposition"
+    ),
+    effect = factor(effect, 
+                    levels = c("disincentive_pc", "incentive_pc", "net_pc"),
+                    labels = c("Borlaug effect", "Jevons effect", "Net impact"))
+  ) |> 
+  ggplot() +
+  aes(
+    x = i,  # Keep raw values, format axes with scales
+    y = abatement,  # Keep raw values, format axes with scales
+    fill = effect
+  ) +
+  geom_area(
+    alpha = 0.7, 
+    colour = NA  # No border for the areas
+  ) +
+  facet_grid(
+    cols = vars(facet),
+    scales = "fixed",
+    labeller = as_labeller(c("Decomposition" = "a. Decomposed", "Net Abatement" = "b. Aggregated"))
+  ) +
+  labs(
+    x = "High-Quality Pastures (%)",
+    y = "C02 Abatement (%)"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.line = element_line(color = "grey30"),
+    axis.title.x = element_text(margin = margin(t = 10)),  # Add space for x-axis label
+    axis.title = element_text(face = "plain"),  # Make axis titles thinner
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(color = "grey85"),
+    panel.grid.major.x = element_blank(),
+    legend.position = "bottom",
+    legend.title = element_blank(),  # Remove legend title
+    legend.text = element_text(size = 9),
+    strip.text = element_text(size = 11, face = "plain"),  # Thin facet labels
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  scale_fill_manual(
+    values = c("Borlaug effect" = "grey70",
+               "Jevons effect" = "grey50",
+               "Net impact" = "grey30")
+  ) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +  # Format x-axis as percentages
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))   # Format y-axis as percentages
+```
 
 ## Cattle heads
 
