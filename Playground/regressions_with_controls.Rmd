@@ -19,7 +19,8 @@ library(tinytable)
 # Graphics
 library(ggplot2)
 library(ggpattern)
-library(scales) 
+library(scales)
+library(extrafont)
 
 # Geographic
 library(sf)
@@ -947,7 +948,7 @@ rm(x)
 Testing
 ```{r}
 tax_counterfactual(int_mod,ext_mod,int_data,ext_cf,
-                               tax = 0)
+                               tax = 30)
 ```
 
 
@@ -961,12 +962,10 @@ x <- tibble(
   )
 
 for (t in c(
-      seq(0, 1, 0.05),
-      seq(1.1, 5, 0.1),
-      seq(5.5, 10, 0.5),
-      seq(11, 20, 1),
-      seq(25, 60, 5),
-      seq(70, 100, 10)
+      seq(0, 2, 0.05),
+      seq(2.1, 10, 0.1),
+      seq(10.5, 20, 0.5),
+      seq(21, 70, 1)
     )
   ) {
   # counter (in tens)
@@ -994,30 +993,6 @@ tax_results <- x |>
     co2_tax_pc = co2_tax/hat_co2
   )
 ```
-
-```{r}
-smooth_data <- approx(y = tax_results$t, x = tax_results$tax, n = 100000) |>  as_tibble()
-
-smooth_data |> 
-  filter(
-    y <= 40
-  ) |> 
-  ggplot() +
-  aes(
-    x = x,
-    y = y
-  ) +
-  labs(
-    x = "Deforestation (ha)",
-    y = "Tax rate (R$ / tCO2)"
-  ) +
-  geom_line(
-    linewidth = 0.8,
-    color = "grey35"
-  ) +
-  theme_minimal()
-```
-
 
 # Maps
 
@@ -1187,6 +1162,15 @@ ggsave("../Outputs/Graphics/map_biomass.pdf", plot = map_biomass, device = "pdf"
 
 # Plots
 
+## Fonts
+
+```{r}
+# font_import(pattern = "^lmsans.*") 
+# fonttable() |>  View()
+loadfonts()
+```
+
+
 ## CF - Abatement decomposition
 
 ```{r}
@@ -1235,20 +1219,39 @@ recovery_results |>
     x = "High-Quality Pastures (%)",
     y = "C02 Abatement (%)"
   ) +
-  theme_minimal(base_size = 12) +
+  theme_minimal(
+    base_size = 12
+    ) +
   theme(
     axis.line = element_line(color = "grey30"),
-    axis.title.x = element_text(margin = margin(t = 10)),  # Add space for x-axis label
-    axis.title = element_text(face = "plain"),  # Make axis titles thinner
-    panel.grid.minor = element_blank(),
-    panel.grid.major.y = element_line(color = "grey85"),
-    panel.grid.major.x = element_blank(),
+    axis.title.x = element_text(
+      size = 10,
+      margin = margin(t = 10),
+      family = "LM Sans 10"  # Change to your preferred sans-serif font
+      ),
+    axis.title.y = element_text(
+      size = 10,
+      family = "LM Sans 10"  # Ensures y-axis titles are sans-serif
+      ),
+    axis.text = element_text(
+      family = "LM Sans 10"  # Change tick labels to sans-serif
+      ),
+    legend.text = element_text(
+      family = "LM Sans 10",  # Change legend text to sans-serif
+      size = 9
+      ),
     legend.position = "bottom",
     legend.title = element_blank(),  # Remove legend title
-    legend.text = element_text(size = 9),
-    strip.text = element_text(size = 11, face = "plain"),  # Thin facet labels
-    plot.title = element_text(hjust = 0.5)
-  ) +
+    strip.placement = "outside",      # Ensure facet titles remain outside panels
+    strip.text = element_text(
+      family = "LM Sans 10",  # Panel titles in "LM Roman 10"
+      size = 11.5,
+      face = "plain"
+      ),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(color = "grey85"),
+    panel.grid.major.x = element_blank()
+    ) +
   scale_fill_manual(
     values = c("Borlaug effect" = "grey70",
                "Jevons effect" = "grey50",
@@ -1257,6 +1260,53 @@ recovery_results |>
   scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +  # Format x-axis as percentages
   scale_y_continuous(labels = scales::percent_format(accuracy = 1))   # Format y-axis as percentages
 ```
+
+## CF - Taxes
+
+```{r}
+tax_results_smooth <- approx(x = tax_results$t, y = tax_results$tax_co2, n = 100) |>  as_tibble()
+
+tax_results_smooth |> 
+  filter(
+    x <= 30
+  ) |> 
+  ggplot() +
+  aes(
+    x = x,
+    y = y
+  ) +
+  labs(
+    y = "Abatement",
+    x = "Tax rate ($ / tCO2)"
+  ) +
+  geom_line(
+    #linewidth = 0.8,
+    color = "grey35"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.line = element_line(color = "grey30"),
+    axis.title.x = element_text(margin = margin(t = 10)),  # Add space for x-axis label
+    axis.title = element_text(face = "plain"),  # Make axis titles thinner
+    legend.position = "bottom",
+    legend.title = element_blank(),  # Remove legend title
+    legend.text = element_text(size = 9),
+    strip.text = element_text(size = 11, face = "plain"),  # Thin facet labels
+    plot.title = element_text(hjust = 0.5)
+  ) 
+```
+
+## CF - Taxes vs recovery
+
+```{r}
+combined <- bind_rows(
+  tax_results |> transmute(x = t, y = tax_co2)
+    
+  )
+)
+
+```
+
 
 ## Cattle heads
 
