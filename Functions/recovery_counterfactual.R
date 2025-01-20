@@ -4,8 +4,7 @@ recovery_counterfactual <- function(
     int_data, 
     ext_cf, 
     min_high_share,
-    beta = 0.9,
-    h_hat = predict(int_mod, newdata = int_data)
+    beta = 0.9
 ) {
   
   #################### Intensive Margin #################
@@ -30,7 +29,7 @@ recovery_counterfactual <- function(
     ) |> 
     mutate(
       # Predicted baseline from model coefficients
-      h_hat = h_hat,
+      h_hat = predict(int_mod, newdata = int_data),
       
       # Predicted from counterfactual recovery
       h_recovery = predict(int_mod, newdata = int_cf_recovery)
