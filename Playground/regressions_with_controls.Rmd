@@ -920,13 +920,13 @@ for (i in seq(0, 1, 0.01)) {
 recovery_results <- x |> 
   mutate(
     # land area SAVED
-    def_disincentive = hat - potential,
-    def_incentive = potential - effective,
-    def_net = hat - effective,
+    sav_disincentive = hat - potential,
+    sav_incentive = potential - effective,
+    sav_net = hat - effective,
     
-    def_disincentive_pc = def_disincentive/hat,
-    def_incentive_pc = def_incentive/hat,
-    def_net_pc = def_net/hat,
+    sav_disincentive_pc = sav_disincentive/hat,
+    sav_incentive_pc = sav_incentive/hat,
+    sav_net_pc = sav_net/hat,
     
     # carbon ABATEMENT
     co2_disincentive = hat_co2 - potential_co2,
@@ -937,22 +937,87 @@ recovery_results <- x |>
     co2_incentive_pc = co2_incentive/hat_co2,
     co2_net_pc = co2_net/hat_co2
   )
+
+rm(x)
 ```
 
 
 ## Carbon tax
 
 Testing
+```{r}
+tax_counterfactual(int_mod,ext_mod,int_data,ext_cf,
+                               tax = 0)
+```
+
 
 ```{r}
-tax_counterfactual(
-  int_mod,
-  ext_mod,
-  int_data,
-  ext_cf,
-  tax = 30
-)
+x <- tibble(
+  t = double(), 
+  hat = double(),
+  hat_co2 = double(),
+  tax = double(),
+  tax_co2 = double(),
+  )
+
+for (t in c(
+      seq(0, 1, 0.05),
+      seq(1.1, 5, 0.1),
+      seq(5.5, 10, 0.5),
+      seq(11, 20, 1),
+      seq(25, 60, 5),
+      seq(70, 100, 10)
+    )
+  ) {
+  # counter (in tens)
+  if(t %in% c(0,1.1,5.5,11,25,70)) {
+    cat(" ", t)
+    }
+  
+  result <- tax_counterfactual(int_mod,ext_mod,int_data,ext_cf,
+                               tax = t)
+  
+  x <- x |> 
+    rows_append(
+      tibble(t = t, result) 
+    )
+}
+
+tax_results <- x |> 
+  mutate(
+    # land area SAVED
+    sav_tax = hat - tax,
+    sav_tax_pc = sav_tax/hat,
+    
+    # carbon ABATEMENT
+    co2_tax = hat_co2 - tax_co2,
+    co2_tax_pc = co2_tax/hat_co2
+  )
 ```
+
+```{r}
+smooth_data <- approx(y = tax_results$t, x = tax_results$tax, n = 100000) |>  as_tibble()
+
+smooth_data |> 
+  filter(
+    y <= 40
+  ) |> 
+  ggplot() +
+  aes(
+    x = x,
+    y = y
+  ) +
+  labs(
+    x = "Deforestation (ha)",
+    y = "Tax rate (R$ / tCO2)"
+  ) +
+  geom_line(
+    linewidth = 0.8,
+    color = "grey35"
+  ) +
+  theme_minimal()
+```
+
 
 # Maps
 
