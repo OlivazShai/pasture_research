@@ -1,11 +1,45 @@
 y_tax <- function(
     int_mod, 
     ext_mod,
+    int_data,
     ext_cf,
     tax) {
   
   # import structural parameter calculation
   source("../Functions/structural_parameters.R")
+  
+  ############## Intensive Margin ##################
+  
+  # Predicted baseline from model coefficients
+  int_cf_predicted <- int_data |>
+    select(
+      code_amc,
+      year
+    ) |> 
+    mutate(
+      h_hat = predict(int_mod, newdata = int_data)
+    )
+  
+  ################## Extensive Margin #################
+  
+  # Predicted with int margin
+  ext_cf_predicted <- ext_cf |> 
+    left_join(
+      int_cf_predicted,
+      by = c("code_amc", "year")
+    ) |> 
+    # calculates predicted x2
+    mutate(
+      x2 = case_when(
+        # census year
+        year %in% c(2006,2017) ~ 0.45*(h_hat)**2,
+        
+        # next year
+        year %in% c(2007,2018) ~ 0.45*(h)**2,
+        .default = NA)
+    )
+  
+  ############## extract coefficients ##############
   
   # Extract original coefficients
   coefs <- coef(ext_mod)
@@ -14,10 +48,12 @@ y_tax <- function(
   alpha_p = calculate_structural_params(int_mod, ext_mod)$Value[3]
   
   # Replace the coefficient of biomass_density with new_alpha_b
-  coefs["biomass_density"] <- - tax * alpha_p
+  coefs["biomass_density"] <- coefs["biomass_density"] - tax * alpha_p
   
   # Extract the design matrix for the NEW data
-  design_matrix <- model.matrix(ext_mod, data = ext_cf)
+  design_matrix <- model.matrix(ext_mod, data = ext_cf_predicted)
+  
+  ############## calculate counterfactual y ##############
   
   # Calculate the new predictions (excluding fixed effects)
   y_biomass <- as.vector(design_matrix %*% coefs)
@@ -57,6 +93,7 @@ tax_counterfactual <- function(
       y_tax = y_tax(
         int_mod = int_mod, 
         ext_mod = ext_mod,
+        int_data = int_data,
         ext_cf = ext_cf, 
         tax = tax),
     ) |> 
