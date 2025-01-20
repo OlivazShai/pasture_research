@@ -41,6 +41,7 @@ library(purrr)
 # Personal functions
 source("../Functions/bulk_rds.R")
 source("../Functions/recovery_counterfactual.R")
+source("../Functions/tax_counterfactual.R")
 source("../Functions/structural_parameters.R")
 ```
 
@@ -861,9 +862,10 @@ ext_cf <- ext_data_complete |>
 
 ## Pasture recovery
 
+Testing for some minimum value of high_share.
 
 ```{r}
-min_high_share <- 0
+min_high_share <- 0.9
 
 recovery_counterfactual(
   int_mod, 
@@ -875,6 +877,7 @@ recovery_counterfactual(
 )
 ```
 
+Calculating in a loop, in increments of 0.01.
 
 ```{r}
 x <- tibble(
@@ -937,42 +940,18 @@ recovery_results <- x |>
 ```
 
 
-
-```{r}
-ggplot(recovery_results) +
-  geom_line(aes(y = i, x = effective_co2)) +
-  labs(y = "pasture quality", x = "emissions (Gt Co2)") +
-  theme_minimal()
-```
-
 ## Carbon tax
 
 Testing
 
 ```{r}
-ext_cf |> 
-  mutate(
-    y_biomass = tax_counterfactual(int_mod, ext_mod, ext_cf, tax = 50),
-    y_hat = predict(ext_mod, newdata = ext_cf)
-  ) |> 
-  select(
-    code_amc, year, rho_1, rho_2, y_biomass, y_hat, natural
-  ) |> 
-  mutate(
-    across(
-      .cols = c(y_biomass, y_hat),
-      .fns = ~ logit(.x - 0.9*gamma + 0.9*log(rho_2)),
-      .names = "rho_{.col}"
-    )
-  ) |> 
-  filter(
-      year %in% c(2006, 2017)
-    ) |> 
-  summarise(
-    real = sum(rho_1*natural),
-    hat = sum(rho_y_hat*natural),
-    biomass = sum(rho_y_biomass*natural)
-  )
+tax_counterfactual(
+  int_mod,
+  ext_mod,
+  int_data,
+  ext_cf,
+  tax = 30
+)
 ```
 
 # Maps
@@ -1334,12 +1313,6 @@ Annuity/perpetuity equivalent
 6.60 (2019 US$)
 26.0337 (2019 R$)
 31.67981 (2022 R$)
-
-Alpha_p
-0.0033579724
-
-Result:
--0.1063799
 
 
 # Regression tables
