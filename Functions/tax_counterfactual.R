@@ -3,10 +3,8 @@ y_tax <- function(
     ext_mod,
     int_data,
     ext_cf,
-    tax) {
-  
-  # import structural parameter calculation
-  source("../Functions/structural_parameters.R")
+    tax,
+    beta = 0.9) {
   
   ############## Intensive Margin ##################
   
@@ -41,6 +39,14 @@ y_tax <- function(
   
   ############## extract coefficients ##############
   
+  # Convert tax in $ to yearly R$
+    # calculate annuity
+  annuity <- tax * (1-beta)
+    # times exchange rate
+  annuity_rs_2019 <- annuity * 3.9445
+    # deflate with IPCA
+  annuity_rs_2022 <- annuity_rs_2019 * 6474.09/5320.25
+  
   # Extract original coefficients
   coefs <- coef(ext_mod)
   
@@ -48,7 +54,7 @@ y_tax <- function(
   alpha_p = calculate_structural_params(int_mod, ext_mod)$Value[3]
   
   # Replace the coefficient of biomass_density with new_alpha_b
-  coefs["biomass_density"] <- coefs["biomass_density"] - tax * alpha_p
+  coefs["biomass_density"] <- coefs["biomass_density"] - annuity_rs_2022 * alpha_p
   
   # Extract the design matrix for the NEW data
   design_matrix <- model.matrix(ext_mod, data = ext_cf_predicted)
@@ -72,8 +78,12 @@ tax_counterfactual <- function(
     ext_mod,
     int_data,
     ext_cf,
-    tax
+    tax,
+    beta = 0.9
     ) {
+  
+  # import structural parameter calculation
+  source("../Functions/structural_parameters.R")
   
   # Get baseline deforestation estimate
   hats = recovery_counterfactual(
@@ -82,6 +92,7 @@ tax_counterfactual <- function(
     int_data = int_data, 
     ext_cf = ext_cf, 
     min_high_share = 0,
+    beta = beta
   ) |>
     filter(type == "static") |>
     select(hat, hat_co2)
@@ -95,7 +106,8 @@ tax_counterfactual <- function(
         ext_mod = ext_mod,
         int_data = int_data,
         ext_cf = ext_cf, 
-        tax = tax),
+        tax = tax,
+        beta = beta),
     ) |> 
     select(
       code_amc, year, rho_1, rho_2, y_tax, natural, biomass_density
