@@ -21,6 +21,7 @@ library(ggplot2)
 library(ggpattern)
 library(scales)
 library(extrafont)
+library(patchwork)
 
 # Geographic
 library(sf)
@@ -892,6 +893,11 @@ x <- tibble(
   )
 
 for (i in seq(0, 1, 0.01)) {
+  
+  if(i %in% c(0,0.2,0.4,0.6,0.8)) {
+    cat(" ", i)
+    }
+  
   result <- recovery_counterfactual(
     int_mod, 
     ext_mod, 
@@ -946,8 +952,7 @@ recovery_results <- x |>
 Testing.
 
 ```{r}
-tax_counterfactual(int_mod,ext_mod,int_data,ext_cf,
-                               tax = 66)
+tax_counterfactual(int_mod,ext_mod,int_data,ext_cf,tax = 66)
 ```
 
 
@@ -1219,36 +1224,19 @@ recovery_results |>
     y = "C02 Abatement (%)"
   ) +
   theme_minimal(
-    base_size = 12
+    base_size = 12,
+    base_family = "LM Sans 10"
     ) +
   theme(
-    axis.line = element_line(color = "grey30"),
-    axis.title.x = element_text(
-      size = 10,
-      margin = margin(t = 10),
-      family = "LM Sans 10"  # Change to your preferred sans-serif font
-      ),
-    axis.title.y = element_text(
-      size = 10,
-      family = "LM Sans 10"  # Ensures y-axis titles are sans-serif
-      ),
-    axis.text = element_text(
-      family = "LM Sans 10"  # Change tick labels to sans-serif
-      ),
-    legend.text = element_text(
-      family = "LM Sans 10",  # Change legend text to sans-serif
-      size = 9
-      ),
+    axis.line = element_line(color = "grey40"),
+    axis.title.x = element_text( size = 10, margin = margin(t = 10)),
+    axis.title.y = element_text( size = 10, margin = margin(r = 5)),
+    axis.text = element_text( size = 9),
+    legend.text = element_text( size = 9),
     legend.position = "bottom",
     legend.title = element_blank(),  # Remove legend title
-    strip.placement = "outside",      # Ensure facet titles remain outside panels
-    strip.text = element_text(
-      family = "LM Sans 10",  # Panel titles in "LM Roman 10"
-      size = 11.5,
-      face = "plain"
-      ),
+    strip.text = element_text( size = 11.5, face = "plain"),
     panel.grid.minor = element_blank(),
-    panel.grid.major.y = element_line(color = "grey85"),
     panel.grid.major.x = element_blank()
     ) +
   scale_fill_manual(
@@ -1260,23 +1248,174 @@ recovery_results |>
   scale_y_continuous(labels = scales::percent_format(accuracy = 1))   # Format y-axis as percentages
 ```
 
+## CF - Taxes vs recovery
+
+```{r}
+# Define the recovery plot
+recovery_plot <- recovery_results |> 
+  ggplot() +
+  aes(
+    x = i, 
+    y = effective
+  ) +
+  geom_area(
+    fill = "grey20",
+    alpha = 0.7, 
+    colour = NA
+    ) +
+  labs(
+    x = "High-quality pastures (%)",
+    y = "Deforestation (1000 km²)"
+  ) +
+  theme_minimal(
+    base_size = 12, 
+    base_family = "LM Sans 10"
+    ) +
+  theme(
+    plot.title = element_text(size = 11.5, hjust = 0.5),
+    axis.line = element_line(color = "grey40"),
+    axis.text = element_text(size = 9),
+    axis.title.x = element_text(size = 10, margin = margin(t = 10)),
+    axis.title.y = element_text(size = 10, margin = margin(r = 5)),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    legend.position = "none"
+    ) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_y_continuous(labels = scales::number_format(accuracy = 1)) +
+  ggtitle("a. Pasture Recovery")
+
+# Define the carbon tax plot
+tax_plot <- tax_results |> 
+  filter(t <= 5) |> 
+  ggplot() +
+  aes(
+    x = t, 
+    y = tax
+  ) +
+  geom_area(
+    fill = "grey60",
+    alpha = 0.7, 
+    colour = NA
+    ) +
+  labs(
+    x = "Carbon tax ($/tCO₂)",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 12, base_family = "LM Sans 10") +
+  theme(
+    plot.title = element_text(size = 11.5, hjust = 0.5),
+    axis.line.x = element_line(color = "grey40"),
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.x = element_text(size = 9),
+    axis.text.y = element_blank(),
+    axis.title.x = element_text(size = 10, margin = margin(t = 10)),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    legend.position = "none"
+  ) +
+  scale_x_continuous(labels = scales::number_format(accuracy = 1)) +
+  scale_y_continuous(labels = scales::number_format(accuracy = 1)) +
+  ggtitle("b. Carbon Tax")
+
+# Combine the plots using patchwork
+recovery_plot + tax_plot
+```
+
+
 ## CF - Taxes
 
 ```{r}
-tax_results_smooth <- approx(x = tax_results$t, y = tax_results$tax_co2, n = 1000) |>  as_tibble()
+# Adjusted Emissions Curve
+curve_co2 <- tax_results |> 
+  filter(t <= 66) |> 
+  ggplot() +
+  aes(
+    x = tax,
+    y = t
+  ) +
+  geom_line(
+    linewidth = 0.75,
+    color = "grey35"
+  ) +
+  labs(
+    x = "Emissions (Gt CO2)",
+    y = "Tax rate ($ / tCO2)"
+  ) +
+  theme_minimal(
+    base_size = 12,
+    base_family = "LM Sans 10"
+  ) +
+  theme(
+    aspect.ratio = 1,
+    plot.title = element_text(size = 11.5, hjust = 0.5),
+    axis.line = element_line(color = "grey40"),
+    axis.text = element_text(size = 9),
+    axis.title.x = element_text(size = 10, margin = margin(t = 10)),
+    axis.title.y = element_text(size = 10, margin = margin(r = 5)),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    legend.position = "none"
+  ) +
+  scale_x_continuous(labels = scales::number_format(accuracy = 1)) +
+  scale_y_continuous(labels = scales::number_format(accuracy = 1)) +
+  ggtitle("a. Carbon emissions")
 
-tax_results_smooth |> 
+# Adjusted Avoided Deforestation Curve
+curve_sav <- tax_results |> 
+  filter(t <= 66) |> 
+  ggplot() +
+  aes(
+    x = sav_tax,
+    y = t
+  ) +
+  geom_line(
+    linewidth = 0.75,
+    color = "grey35"
+  ) +
+  labs(
+    x = "Area (1000 km²)",
+    y = "Tax rate ($ / tCO2)"
+  ) +
+  theme_minimal(
+    base_size = 12,
+    base_family = "LM Sans 10"
+  ) +
+  theme(
+    aspect.ratio = 1,
+    plot.title = element_text(size = 11.5, hjust = 0.5),
+    axis.line = element_line(color = "grey40"),
+    axis.text = element_text(size = 9),
+    axis.title.x = element_text(size = 10, margin = margin(t = 10)),
+    axis.title.y = element_text(size = 10, margin = margin(r = 5)),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    legend.position = "none"
+  ) +
+  scale_x_continuous(labels = scales::number_format(accuracy = 1)) +
+  scale_y_continuous(labels = scales::number_format(accuracy = 1)) +
+  ggtitle("b. Prevented deforestation")
+  
+
+# Combine the plots
+curve_sav + curve_co2
+```
+
+
+```{r}
+curve_co2 <- tax_results |> 
   filter(
-    x <= 47
+    t <= 66
   ) |> 
   ggplot() +
   aes(
-    x = x,
-    y = y
+    x = tax,
+    y = t
   ) +
   labs(
-    y = "Co2 Emissions",
-    x = "Tax rate ($ / tCO2)"
+    x = "Emissions (Gt CO2)",
+    y = "Tax rate ($ / tCO2)"
   ) +
   geom_line(
     linewidth = 0.75,
@@ -1285,8 +1424,8 @@ tax_results_smooth |>
   theme_minimal() +
   theme(
     panel.grid.minor = element_blank(),
-    panel.grid.major.y = element_blank(),
-    panel.grid.major.x = element_blank(),
+    #panel.grid.major.y = element_blank(),
+    #panel.grid.major.x = element_blank(),
     axis.line = element_line(color = "grey30"),
     axis.title.x = element_text(margin = margin(t = 10)),  # Add space for x-axis label
     axis.title = element_text(face = "plain"),  # Make axis titles thinner
@@ -1295,44 +1434,42 @@ tax_results_smooth |>
     legend.text = element_text(size = 9),
     strip.text = element_text(size = 11, face = "plain"),  # Thin facet labels
     plot.title = element_text(hjust = 0.5)
-  ) 
-```
-
-## CF - Taxes vs recovery
-
-```{r}
-combined <- bind_rows(
-  tax_results |> 
-    filter(
-      t <= 1
-    )|> 
-    transmute(y = sav_tax_pc, x = t, facet = "tax"),
-  recovery_results |> transmute(y = sav_net_pc, x = i, facet = "recovery")
   )
 
-combined |> 
+curve_sav <- tax_results |> 
+  filter(
+    t <= 66
+  ) |> 
   ggplot() +
   aes(
-    x = x, 
-    y = y
-    ) +
-  geom_area(
-    alpha = 0.6
-    ) +
-  facet_grid(cols = vars(facet), scales = "free_x") +
-  labs(
-    x = NULL,  # Remove global x-axis title
-    y = "Y-Axis Label"
+    x = sav_tax,
+    y = t
   ) +
-  theme_minimal(base_size = 12) +
+  labs(
+    x = "Avoided deforestation (1000 km2)",
+    y = "Tax rate ($ / tCO2)"
+  ) +
+  geom_line(
+    linewidth = 0.75,
+    color = "grey35"
+  ) +
+  theme_minimal() +
   theme(
-    strip.text = element_text(size = 11, face = "plain", family = "LM Sans 10"),
     panel.grid.minor = element_blank(),
-    legend.position = "none"
+    #panel.grid.major.y = element_blank(),
+    #panel.grid.major.x = element_blank(),
+    axis.line = element_line(color = "grey30"),
+    axis.title.x = element_text(margin = margin(t = 10)),  # Add space for x-axis label
+    axis.title = element_text(face = "plain"),  # Make axis titles thinner
+    legend.position = "bottom",
+    legend.title = element_blank(),  # Remove legend title
+    legend.text = element_text(size = 9),
+    strip.text = element_text(size = 11, face = "plain"),  # Thin facet labels
+    plot.title = element_text(hjust = 0.5)
   )
 
+curve_sav + curve_co2
 ```
-
 
 ## Cattle heads
 
