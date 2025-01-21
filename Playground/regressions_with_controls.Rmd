@@ -1477,16 +1477,16 @@ curve_sav + curve_co2
 plot_ch <- ext_ppm |> 
   summarise(
     ch = sum(cattle_heads),
-    .by = c(code_biome, main_biome, year)
+    .by = c(main_biome, year)
   ) |> 
   mutate(
     Bioma = case_when(
-      code_biome == 1 ~ "Amazônia",
-      code_biome == 2 ~ "Caatinga",
-      code_biome == 3 ~ "Cerrado",
-      code_biome == 4 ~ "Mata Atlântica",
-      code_biome == 5 ~ "Pampa",
-      code_biome == 6 ~ "Pantanal")
+      main_biome == "amazonia" ~ "Amazônia",
+      main_biome == "caatinga" ~ "Caatinga",
+      main_biome == "cerrado" ~ "Cerrado",
+      main_biome == "mata_atlantica" ~ "Mata Atlântica",
+      main_biome == "pampa" ~ "Pampa",
+      main_biome == "pantanal" ~ "Pantanal")
   ) |> 
   ggplot() +
   # Line plot with color by biome
@@ -1547,7 +1547,7 @@ land_cover_agg |>
   # Line plot with color by biome
   geom_line(
     aes(x = year, y = pasture, color = Bioma),
-    size = 1
+    linewidth = 1
   ) +
   scale_color_manual(
     values = c(
