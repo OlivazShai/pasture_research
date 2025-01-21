@@ -979,6 +979,15 @@ tax_results <- x |>
   )
 ```
 
+# Fonts
+
+```{r}
+# font_import(pattern = "^lmsans.*") 
+# fonttable() |>  View()
+loadfonts()
+```
+
+
 # Maps
 
 ## Data
@@ -1360,19 +1369,10 @@ ggsave(
 
 # Plots
 
-## Fonts
-
-```{r}
-# font_import(pattern = "^lmsans.*") 
-# fonttable() |>  View()
-loadfonts()
-```
-
-
 ## CF - Abatement decomposition
 
 ```{r}
-recovery_results |> 
+decomposition_plot <- recovery_results |> 
   select(
     i,
     co2_disincentive_pc,
@@ -1415,7 +1415,7 @@ recovery_results |>
   ) +
   labs(
     x = "High-Quality Pastures (%)",
-    y = "C02 Abatement (%)"
+    y = expression("CO"[2]~ "Abatement (%)")
   ) +
   theme_minimal(
     base_size = 12,
@@ -1442,6 +1442,18 @@ recovery_results |>
   scale_y_continuous(labels = scales::percent_format(accuracy = 1))   # Format y-axis as percentages
 ```
 
+```{r}
+ggsave(
+  filename = "../Outputs/Graphics/decomposition_plot.png", # Path to save the file
+  plot = decomposition_plot,                  
+  width = 9,                                   # Width in inches
+  height = 5.5,                               # Height in inches
+  units = "in",                                # Units for width/height
+  dpi = 300,                                   # Resolution (DPI for high-quality output)
+  bg = "white"                                 # Background colour
+  )
+```
+
 ## CF - Taxes vs recovery
 
 ```{r}
@@ -1459,7 +1471,7 @@ recovery_plot <- recovery_results |>
     ) +
   labs(
     x = "High-quality pastures (%)",
-    y = "Deforestation (1000 km²)"
+    y = "Converted Area (1000 km²)"
   ) +
   theme_minimal(
     base_size = 12, 
@@ -1493,7 +1505,7 @@ tax_plot <- tax_results |>
     colour = NA
     ) +
   labs(
-    x = "Carbon tax ($/tCO₂)",
+    x = expression("Tax rate ($/tCO"[2]~")"),
     y = NULL
   ) +
   theme_minimal(base_size = 12, base_family = "LM Sans 10") +
@@ -1514,9 +1526,20 @@ tax_plot <- tax_results |>
   ggtitle("b. Carbon Tax")
 
 # Combine the plots using patchwork
-recovery_plot + tax_plot
+comparison_plot <- recovery_plot + tax_plot
 ```
 
+```{r}
+ggsave(
+  filename = "../Outputs/Graphics/comparison_plot.png", # Path to save the file
+  plot = comparison_plot,                  
+  width = 9,                                   # Width in inches
+  height = 5.5,                               # Height in inches
+  units = "in",                                # Units for width/height
+  dpi = 300,                                   # Resolution (DPI for high-quality output)
+  bg = "white"                                 # Background colour
+  )
+```
 
 ## CF - Taxes
 
@@ -1534,8 +1557,8 @@ curve_co2 <- tax_results |>
     color = "grey35"
   ) +
   labs(
-    x = "Emissions (Gt CO2)",
-    y = "Tax rate ($ / tCO2)"
+    x = expression("Emissions (Gt CO"[2]~")"),
+    y = expression("Tax rate ($/tCO"[2]~")")
   ) +
   theme_minimal(
     base_size = 12,
@@ -1554,7 +1577,7 @@ curve_co2 <- tax_results |>
   ) +
   scale_x_continuous(labels = scales::number_format(accuracy = 1)) +
   scale_y_continuous(labels = scales::number_format(accuracy = 1)) +
-  ggtitle("a. Carbon emissions")
+  ggtitle("a. Carbon Emissions")
 
 # Adjusted Avoided Deforestation Curve
 curve_sav <- tax_results |> 
@@ -1569,8 +1592,8 @@ curve_sav <- tax_results |>
     color = "grey35"
   ) +
   labs(
-    x = "Area (1000 km²)",
-    y = "Tax rate ($ / tCO2)"
+    x = bquote("Area (1000 "~km^2 ~ ")"),
+    y = expression("Tax rate ($/tCO"[2]~")")
   ) +
   theme_minimal(
     base_size = 12,
@@ -1589,7 +1612,7 @@ curve_sav <- tax_results |>
   ) +
   scale_x_continuous(labels = scales::number_format(accuracy = 1)) +
   scale_y_continuous(labels = scales::number_format(accuracy = 1)) +
-  ggtitle("b. Prevented deforestation")
+  ggtitle("b. Prevented Conversion")
   
 
 # Combine the plots
