@@ -126,8 +126,8 @@ tax_counterfactual <- function(
       hat = hats$hat,
       hat_co2 = hats$hat_co2,
       # counterfactual
-      tax = sum(rho_y_tax*natural),
-      tax_co2 = sum(rho_y_tax*natural*biomass_density) / 10**9
+      tax = sum(rho_y_tax*natural) / 10**6, # million ha
+      tax_co2 = sum(rho_y_tax*natural*biomass_density) / 10**9 # Gigaton
     )
   
   return(result)
