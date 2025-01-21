@@ -966,6 +966,17 @@ for (t in c(
       tibble(t = t, result) 
     )
 }
+
+tax_results <- x |> 
+  mutate(
+    # land area SAVED
+    sav_tax = hat - tax,
+    sav_tax_pc = sav_tax/hat,
+    
+    # carbon ABATEMENT
+    co2_tax = hat_co2 - tax_co2,
+    co2_tax_pc = co2_tax/hat_co2
+  )
 ```
 
 # Maps
