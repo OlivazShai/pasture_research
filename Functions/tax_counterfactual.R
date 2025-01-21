@@ -98,6 +98,7 @@ tax_counterfactual <- function(
     select(hat, hat_co2)
   
   ############# Calculate probabilities and aggregate ############
+  logit = \(x) exp(x)/(1+exp(x))
   
   result <- ext_cf |>
     mutate(
