@@ -250,9 +250,9 @@ etable(
   fitstat = ~ n + f + ivf)
 ```
 
-Etable with phi:
+Etable with phi, for checks. 
 
-```{r}
+```{r, eval=FALSE}
 phi_iv = function(x) {
   # Extract coefficients
   coefs <- coef(x)
@@ -311,7 +311,7 @@ etable(
 ```
 
 
-```{r}
+```{r, eval=FALSE}
 phi_ols = function(x) {
   # Extract coefficients
   coefs <- stats::coef(x)
@@ -337,7 +337,7 @@ etable(
 
 ## Poisson
 
-```{r}
+```{r, eval=FALSE}
 pois <- feglm(
   data = int_data,
   h ~
@@ -864,21 +864,6 @@ ext_cf <- ext_data_complete |>
 
 ## Pasture recovery
 
-Testing for some minimum value of high_share.
-
-```{r}
-min_high_share <- 0.9
-
-recovery_counterfactual(
-  int_mod, 
-  ext_mod, 
-  int_data,
-  ext_cf, 
-  min_high_share,
-  beta = beta
-)
-```
-
 Calculating in a loop, in increments of 0.01.
 
 ```{r}
@@ -949,11 +934,7 @@ recovery_results <- x |>
 
 ## Carbon tax
 
-Testing.
-
-```{r}
-tax_counterfactual(int_mod,ext_mod,int_data,ext_cf,tax = 66)
-```
+Calculating for a series of tar rates, measured in 2019 US$.
 
 
 ```{r}
@@ -985,184 +966,373 @@ for (t in c(
       tibble(t = t, result) 
     )
 }
-
-tax_results <- x |> 
-  mutate(
-    # land area SAVED
-    sav_tax = hat - tax,
-    sav_tax_pc = sav_tax/hat,
-    
-    # carbon ABATEMENT
-    co2_tax = hat_co2 - tax_co2,
-    co2_tax_pc = co2_tax/hat_co2
-  )
 ```
 
 # Maps
 
+## Data
+
 ```{r}
-map_data <- amc_1991_2022 |> 
-  select(-area_amc) |> 
-  cross_join(
-    tribble(~year, 2006, 2017)
-  ) |> 
-  right_join(
-    ext_data,
-    by = c("code_amc", "year")
+price_map_data <- right_join(
+  amc_1991_2022 |> 
+    select(-area_amc),
+  
+  int_data |>
+    select(code_amc, year, local_price) |> 
+    filter(year == 2017),
+    by = c("code_amc")
+  )
+
+cattle_map_data <- right_join(
+  amc_1991_2022 |> 
+    select(-area_amc),
+  
+  int_data |>
+    select(code_amc, year, cattle_heads_big) |> 
+    filter(year == 2017, cattle_heads_big >0),
+    by = c("code_amc")
+  )
+
+biomass_map_data <- right_join(
+  amc_1991_2022 |> 
+    select(-area_amc),
+  
+  ext_data |>
+    select(code_amc, year, biomass_density) |> 
+    filter(year == 2017),
+    by = c("code_amc")
+  )
+
+si_map_data <- right_join(
+  amc_1991_2022 |> 
+    select(-area_amc),
+  
+  ext_data |>
+    select(code_amc, year, si_median) |> 
+    filter(year == 2017),
+    by = c("code_amc")
+  )
+
+high_share_map_data <- right_join(
+  amc_1991_2022 |> 
+    select(-area_amc),
+  
+  ext_data |>
+    select(code_amc, year, high_share) |> 
+    filter(year == 2017),
+    by = c("code_amc")
+  )
+
+conversion_map_data <- right_join(
+  amc_1991_2022 |> 
+    select(-area_amc),
+  
+  ext_data |>
+    select(code_amc, year, natural, rho_1) |>
+    summarise(conversion = sum(natural*rho_1, na.rm = T), .by = "code_amc"),
+    by = c("code_amc")
+  )
+
+conversion_map_data_2 <- right_join(
+  amc_1991_2022 |> 
+    select(-area_amc),
+  
+  ext_data |>
+    select(code_amc, year, rho_1) |> 
+    filter(year == 2017),
+    by = c("code_amc")
   )
 ```
 
-## Prices
+```{r}
+st_bbox(amc_1991_2022)
+```
+
+## a. Aboveground Carbon Biomass
 
 ```{r}
-map_prices <- ggplot() +
-  # Plot non-NA local_price values
+biomass_map <- ggplot() +
   geom_sf(
-    data = map_data,
-    aes(fill = local_price),  # Automatically detects geometry from sf object
-    color = NA
+    data = biomass_map_data,
+    aes(fill = biomass_density),  
+    color = NA,
+    alpha = 0.9
   ) +
   # Add outline
   geom_sf(
     data = brazil, 
-    color = "lightgrey",
+    color = "grey75",
     fill = NA
   ) +
-  # Create facets for different years
-  facet_wrap(~ year, ncol = 2) +  
+  coord_sf(
+    xlim = c(-73, -35.5)
+  ) +
   # Apply the color scale
   scale_fill_viridis_c(
-    option = "magma",
-    direction = -1
+    option = "cividis",
+    direction = 1
   ) + 
   # Adjust themes for cleaner appearance
-  theme_minimal() +
+  theme_minimal(
+    base_family = "LM Sans 10"
+  ) +
   theme(
+    plot.title = element_text(size = 11.5, hjust = 0.5),
     panel.grid = element_blank(),
     axis.text = element_blank(),
     axis.ticks = element_blank(),
     panel.background = element_rect(fill = NA, color = NA),
-    legend.key.width = unit(0.2, "cm"),
+    legend.key.width = rel(0.1),
+    legend.key.height = rel(0.5),
+    legend.text = element_text(size = rel(0.5), color = "grey30"),
     legend.title = element_blank()
   ) +
-  labs(
-    title = "Local Prices by Year in Sample",
-    subtitle = "Prices per cattle head in R$ of 2022"
-  )
+  ggtitle("a. Carbon Biomass")
 
-
-#ggsave("../Outputs/Graphics/map_prices.pdf", plot = map_prices, device = "pdf", width = 10, height = 6)
+#biomass_map
 ```
 
-
-## Transitions
+## b. Pasture Suitability
 
 ```{r}
-map_transitions <- ggplot(map_data) +
+si_map <- ggplot() +
   geom_sf(
-    data = map_data,
-    aes(fill = rho_1, geometry = geom), 
-    color = NA
-    ) +
-  facet_wrap(~ year, ncol = 2) +  
-  scale_fill_viridis_c(
-    option = "rocket",
-    direction = -1
-    ) +
+    data = si_map_data,
+    aes(fill = si_median),  
+    color = NA,
+    alpha = 0.9
+  ) +
+  # Add outline
   geom_sf(
     data = brazil, 
-    color = "lightgrey",
+    color = "grey75",
     fill = NA
-    ) +
-  theme_minimal() +
+  ) +
+  coord_sf(
+    xlim = c(-73, -35.5)
+  ) +
+  # Apply the color scale
+  scale_fill_viridis_c(
+    option = "cividis",
+    direction = 1
+  ) + 
+  # Adjust themes for cleaner appearance
+  theme_minimal(
+    base_family = "LM Sans 10"
+  ) +
   theme(
+    plot.title = element_text(size = 11.5, hjust = 0.5),
     panel.grid = element_blank(),
     axis.text = element_blank(),
     axis.ticks = element_blank(),
     panel.background = element_rect(fill = NA, color = NA),
-    legend.key.width = unit(0.2, "cm"),
+    legend.key.width = rel(0.1),
+    legend.key.height = rel(0.5),
+    legend.text = element_text(size = rel(0.5), color = "grey30"),
     legend.title = element_blank()
-    ) +
-  labs(
-    title = "Transition probabilities",
-    subtitle = "Yearly conversion rate from natural vegetation to pasture"
-    )
+  ) +
+  ggtitle("b. Pasture Suitability")
 
-map_transitions
-#ggsave("../Outputs/Graphics/map_transitions.pdf", plot = map_transitions, device = "pdf", width = 10, height = 6)
+#si_map
 ```
 
-## Pasture quality
+## c. High-quality Pastures
 
 ```{r}
-map_quality <- ggplot(map_data) +
+high_share_map <- ggplot() +
   geom_sf(
-    aes(fill = low_share), 
-    color = NA
-    ) +
-  facet_wrap(~ year, ncol = 2) +  
-  scale_fill_viridis_c(
-    option = "rocket",
-    direction = -1
-    ) +
+    data = high_share_map_data,
+    aes(fill = high_share),  
+    color = NA,
+    alpha = 0.9
+  ) +
+  # Add outline
   geom_sf(
     data = brazil, 
-    color = "lightgrey",
+    color = "grey75",
     fill = NA
-    ) +
-  theme_minimal() +
+  ) +
+  coord_sf(
+    xlim = c(-73, -35.5)
+  ) +
+  # Apply the color scale
+  scale_fill_viridis_c(
+    option = "cividis",
+    direction = 1,
+    labels = scales::percent_format(accuracy = 1)
+  ) + 
+  # Adjust themes for cleaner appearance
+  theme_minimal(
+    base_family = "LM Sans 10"
+  ) +
   theme(
+    plot.title = element_text(size = 11.5, hjust = 0.5),
     panel.grid = element_blank(),
     axis.text = element_blank(),
     axis.ticks = element_blank(),
     panel.background = element_rect(fill = NA, color = NA),
-    legend.key.width = unit(0.2, "cm"),
+    legend.key.width = rel(0.1),
+    legend.key.height = rel(0.5),
+    legend.text = element_text(size = rel(0.5), color = "grey30"),
     legend.title = element_blank()
-    ) +
-  labs(
-    title = "Pasture quality",
-    subtitle = "Share of pastures with low vegetative vigour by year"
-    )
+  ) +
+  ggtitle("c. High-quality Pastures")
 
-map_quality
-#ggsave("../Outputs/Graphics/map_quality.pdf", plot = map_quality, device = "pdf", width = 10, height = 6)
+#high_share_map
 ```
 
-## Biomass density
+## d. Prices
 
 ```{r}
-map_biomass <- map_data |> 
-  filter(year == 2017) |>
-  ggplot() +
+price_map <- ggplot() +
   geom_sf(
-    aes(fill = biomass_density), 
-    color = NA
-    ) +  
-  scale_fill_viridis_c(
-    direction = -1
-    ) +
+    data = price_map_data,
+    aes(fill = local_price),  
+    color = NA,
+    alpha = 0.9
+  ) +
+  # Add outline
   geom_sf(
     data = brazil, 
-    color = "lightgrey",
+    color = "grey75",
     fill = NA
-    ) +
-  theme_minimal() +
+  ) +
+  coord_sf(
+    xlim = c(-73, -35.5)
+  ) +
+  # Apply the color scale
+  scale_fill_viridis_c(
+    option = "cividis",
+    direction = 1
+  ) + 
+  # Adjust themes for cleaner appearance
+  theme_minimal(
+    base_family = "LM Sans 10"
+  ) +
   theme(
+    plot.title = element_text(size = 11.5, hjust = 0.5),
     panel.grid = element_blank(),
     axis.text = element_blank(),
     axis.ticks = element_blank(),
     panel.background = element_rect(fill = NA, color = NA),
-    legend.key.width = unit(0.2, "cm"),
+    legend.key.width = rel(0.1),
+    legend.key.height = rel(0.5),
+    legend.text = element_text(size = rel(0.5), color = "grey30"),
     legend.title = element_blank()
-    ) +
-  labs(
-    title = "Aboveground Biomass",
-    subtitle = "Density of AGB in CO2-equivalent tons per hectare"
-    )
+  ) +
+  ggtitle("d. Prices")
 
-ggsave("../Outputs/Graphics/map_biomass.pdf", plot = map_biomass, device = "pdf", width = 8, height = 8)
+#price_map
 ```
 
+
+## e. Cattle Heads
+
+```{r}
+cattle_map <- ggplot() +
+  geom_sf(
+    data = cattle_map_data,
+    aes(fill = cattle_heads_big),  
+    color = NA, 
+    alpha = 0.9
+  ) +
+  # Add outline
+  geom_sf(
+    data = brazil, 
+    color = "grey75",
+    fill = NA
+  ) +
+  coord_sf(
+    xlim = c(-73, -35.5)
+  ) +
+  # Apply the color scale
+  scale_fill_viridis_c(
+    option = "cividis",
+    direction = 1,
+    trans = "log10",
+    oob = scales::squish_infinite
+  ) + 
+  # Adjust themes for cleaner appearance
+  theme_minimal(
+    base_family = "LM Sans 10"
+  ) +
+  theme(
+    plot.title = element_text(size = 11.5, hjust = 0.5),
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    legend.key.width = rel(0.1),
+    legend.key.height = rel(0.5),
+    legend.text = element_text(size = rel(0.5), color = "grey30"),
+    legend.title = element_blank()
+  ) +
+  ggtitle("e. Cattle heads")
+
+#cattle_map
+```
+
+## f. Natural to pasture
+
+```{r}
+conversion_map <- ggplot() +
+  geom_sf(
+    data = conversion_map_data,
+    aes(fill = conversion),  
+    color = NA,
+    alpha = 0.9
+  ) +
+  # Add outline
+  geom_sf(
+    data = brazil, 
+    color = "grey75",
+    fill = NA
+  ) +
+  coord_sf(
+    xlim = c(-73, -35.5)
+  ) +
+  # Apply the color scale
+  scale_fill_viridis_c(
+    option = "cividis",
+    direction = 1,
+    trans = "log10",
+    oob = scales::squish_infinite,
+    labels = scales::number_format(accuracy = 1)
+  ) + 
+  # Adjust themes for cleaner appearance
+  theme_minimal(
+    base_family = "LM Sans 10"
+  ) +
+  theme(
+    plot.title = element_text(size = 11.5, hjust = 0.5),
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    legend.key.width = rel(0.1),
+    legend.key.height = rel(0.5),
+    legend.text = element_text(size = rel(0.5), color = "grey30"),
+    legend.title = element_blank()
+  ) +
+  ggtitle("f. Land Conversion")
+
+conversion_map
+```
+
+## Aggregation
+
+```{r}
+agg_map <- wrap_plots(
+    ncol = 2,
+    biomass_map, si_map,
+    high_share_map, price_map,
+    cattle_map, conversion_map)
+```
+
+```{r}
+dev.new(width = 7, height = 10.5)
+#agg_map
+```
 
 # Plots
 
@@ -1402,177 +1572,6 @@ curve_sav <- tax_results |>
 curve_sav + curve_co2
 ```
 
-
-```{r}
-curve_co2 <- tax_results |> 
-  filter(
-    t <= 66
-  ) |> 
-  ggplot() +
-  aes(
-    x = tax,
-    y = t
-  ) +
-  labs(
-    x = "Emissions (Gt CO2)",
-    y = "Tax rate ($ / tCO2)"
-  ) +
-  geom_line(
-    linewidth = 0.75,
-    color = "grey35"
-  ) +
-  theme_minimal() +
-  theme(
-    panel.grid.minor = element_blank(),
-    #panel.grid.major.y = element_blank(),
-    #panel.grid.major.x = element_blank(),
-    axis.line = element_line(color = "grey30"),
-    axis.title.x = element_text(margin = margin(t = 10)),  # Add space for x-axis label
-    axis.title = element_text(face = "plain"),  # Make axis titles thinner
-    legend.position = "bottom",
-    legend.title = element_blank(),  # Remove legend title
-    legend.text = element_text(size = 9),
-    strip.text = element_text(size = 11, face = "plain"),  # Thin facet labels
-    plot.title = element_text(hjust = 0.5)
-  )
-
-curve_sav <- tax_results |> 
-  filter(
-    t <= 66
-  ) |> 
-  ggplot() +
-  aes(
-    x = sav_tax,
-    y = t
-  ) +
-  labs(
-    x = "Avoided deforestation (1000 km2)",
-    y = "Tax rate ($ / tCO2)"
-  ) +
-  geom_line(
-    linewidth = 0.75,
-    color = "grey35"
-  ) +
-  theme_minimal() +
-  theme(
-    panel.grid.minor = element_blank(),
-    #panel.grid.major.y = element_blank(),
-    #panel.grid.major.x = element_blank(),
-    axis.line = element_line(color = "grey30"),
-    axis.title.x = element_text(margin = margin(t = 10)),  # Add space for x-axis label
-    axis.title = element_text(face = "plain"),  # Make axis titles thinner
-    legend.position = "bottom",
-    legend.title = element_blank(),  # Remove legend title
-    legend.text = element_text(size = 9),
-    strip.text = element_text(size = 11, face = "plain"),  # Thin facet labels
-    plot.title = element_text(hjust = 0.5)
-  )
-
-curve_sav + curve_co2
-```
-
-## Cattle heads
-
-```{r}
-plot_ch <- ext_ppm |> 
-  summarise(
-    ch = sum(cattle_heads),
-    .by = c(main_biome, year)
-  ) |> 
-  mutate(
-    Bioma = case_when(
-      main_biome == "amazonia" ~ "Amazônia",
-      main_biome == "caatinga" ~ "Caatinga",
-      main_biome == "cerrado" ~ "Cerrado",
-      main_biome == "mata_atlantica" ~ "Mata Atlântica",
-      main_biome == "pampa" ~ "Pampa",
-      main_biome == "pantanal" ~ "Pantanal")
-  ) |> 
-  ggplot() +
-  # Line plot with color by biome
-  geom_line(
-    aes(x = year, y = ch, color = Bioma),
-    size = 1
-  ) +
-  scale_color_manual(
-    values = c(
-      "Amazônia" = "#1b9e77", 
-      "Caatinga" = "#ffbb78",
-      "Cerrado" = "#d95f02",
-      "Mata Antlântica" = "#66b3ff",
-      "Pampa" = "#d62728",
-      "Pantanal" = "#9467bd"
-      ),
-    name = "Main Biome"
-  ) +
-  # Labels and titles
-  labs(
-    title = "Cattle Heads Over Time by Main Biome",
-    subtitle = "Regional distribution of cattle heads from 2000 to 2022",
-    x = "Year",
-    y = "Cattle Heads"
-  ) +
-  # Improved theme
-  theme_minimal() +
-  theme(
-    axis.text = element_text(color = "black")
-  )
-
-plot_ch
-#ggsave("../Outputs/Graphics/plot_ch.pdf", plot = plot_ch, device = "pdf", width = 10, height = 6)
-```
-
-## Pastures
-
-```{r}
-land_cover_agg |> 
-  left_join(
-    select(agg_census_data, c(code_amc, code_biome, main_biome)),
-    by = "code_amc"
-  ) |> 
-  summarise(
-    pasture = sum(pasture, na.rm = T),
-    .by = c(code_biome, main_biome, year)
-  ) |> 
-  mutate(
-    Bioma = case_when(
-      code_biome == 1 ~ "Amazônia",
-      code_biome == 2 ~ "Caatinga",
-      code_biome == 3 ~ "Cerrado",
-      code_biome == 4 ~ "Mata Atlântica",
-      code_biome == 5 ~ "Pampa",
-      code_biome == 6 ~ "Pantanal")
-  ) |> 
-  ggplot() +
-  # Line plot with color by biome
-  geom_line(
-    aes(x = year, y = pasture, color = Bioma),
-    linewidth = 1
-  ) +
-  scale_color_manual(
-    values = c(
-      "Amazônia" = "#1b9e77", 
-      "Caatinga" = "#ffbb78",
-      "Cerrado" = "#d95f02",
-      "Mata Antlântica" = "#66b3ff",
-      "Pampa" = "#d62728",
-      "Pantanal" = "#9467bd"
-      ),
-    name = "Main Biome"
-  ) +
-  # Labels and titles
-  labs(
-    title = "Pasture area Over Time by Main Biome",
-    subtitle = "Regional distribution of pastures from 2001 to 2020",
-    x = "Year",
-    y = "Pasture area (ha)"
-  ) +
-  # Improved theme
-  theme_minimal() +
-  theme(
-    axis.text = element_text(color = "black")
-  )
-```
 
 # Notes
 
@@ -1933,5 +1932,110 @@ etable(
     ),
   title = "Extensive margin regression with survey data",
   headers = c("OLS", "IV")
+  )
+```
+
+# Unused content
+
+## Cattle heads
+
+```{r, eval=FALSE}
+plot_ch <- ext_ppm |> 
+  summarise(
+    ch = sum(cattle_heads),
+    .by = c(main_biome, year)
+  ) |> 
+  mutate(
+    Bioma = case_when(
+      main_biome == "amazonia" ~ "Amazônia",
+      main_biome == "caatinga" ~ "Caatinga",
+      main_biome == "cerrado" ~ "Cerrado",
+      main_biome == "mata_atlantica" ~ "Mata Atlântica",
+      main_biome == "pampa" ~ "Pampa",
+      main_biome == "pantanal" ~ "Pantanal")
+  ) |> 
+  ggplot() +
+  # Line plot with color by biome
+  geom_line(
+    aes(x = year, y = ch, color = Bioma),
+    size = 1
+  ) +
+  scale_color_manual(
+    values = c(
+      "Amazônia" = "#1b9e77", 
+      "Caatinga" = "#ffbb78",
+      "Cerrado" = "#d95f02",
+      "Mata Antlântica" = "#66b3ff",
+      "Pampa" = "#d62728",
+      "Pantanal" = "#9467bd"
+      ),
+    name = "Main Biome"
+  ) +
+  # Labels and titles
+  labs(
+    title = "Cattle Heads Over Time by Main Biome",
+    subtitle = "Regional distribution of cattle heads from 2000 to 2022",
+    x = "Year",
+    y = "Cattle Heads"
+  ) +
+  # Improved theme
+  theme_minimal() +
+  theme(
+    axis.text = element_text(color = "black")
+  )
+
+plot_ch
+#ggsave("../Outputs/Graphics/plot_ch.pdf", plot = plot_ch, device = "pdf", width = 10, height = 6)
+```
+
+## Pastures
+
+```{r, eval=FALSE}
+land_cover_agg |> 
+  left_join(
+    select(agg_census_data, c(code_amc, code_biome, main_biome)),
+    by = "code_amc"
+  ) |> 
+  summarise(
+    pasture = sum(pasture, na.rm = T),
+    .by = c(code_biome, main_biome, year)
+  ) |> 
+  mutate(
+    Bioma = case_when(
+      code_biome == 1 ~ "Amazônia",
+      code_biome == 2 ~ "Caatinga",
+      code_biome == 3 ~ "Cerrado",
+      code_biome == 4 ~ "Mata Atlântica",
+      code_biome == 5 ~ "Pampa",
+      code_biome == 6 ~ "Pantanal")
+  ) |> 
+  ggplot() +
+  # Line plot with color by biome
+  geom_line(
+    aes(x = year, y = pasture, color = Bioma),
+    linewidth = 1
+  ) +
+  scale_color_manual(
+    values = c(
+      "Amazônia" = "#1b9e77", 
+      "Caatinga" = "#ffbb78",
+      "Cerrado" = "#d95f02",
+      "Mata Antlântica" = "#66b3ff",
+      "Pampa" = "#d62728",
+      "Pantanal" = "#9467bd"
+      ),
+    name = "Main Biome"
+  ) +
+  # Labels and titles
+  labs(
+    title = "Pasture area Over Time by Main Biome",
+    subtitle = "Regional distribution of pastures from 2001 to 2020",
+    x = "Year",
+    y = "Pasture area (ha)"
+  ) +
+  # Improved theme
+  theme_minimal() +
+  theme(
+    axis.text = element_text(color = "black")
   )
 ```
