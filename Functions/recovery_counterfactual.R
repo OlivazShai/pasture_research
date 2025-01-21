@@ -171,12 +171,12 @@ recovery_counterfactual <- function(
       year %in% c(2006, 2017)
     ) |> 
     summarise(
-      # In converted area
-      real = sum(rho_1*natural),
-      e = sum(rho_y_e*natural),
-      hat = sum(rho_y_hat*natural),
-      effective = sum(rho_y_effective*natural),
-      potential = sum(rho_y_potential*natural),
+      # In converted area in MILLION HECTARES (10,000 km2)
+      real = sum(rho_1*natural) / 10**6,
+      e = sum(rho_y_e*natural) / 10**6,
+      hat = sum(rho_y_hat*natural) / 10**6,
+      effective = sum(rho_y_effective*natural) / 10**6,
+      potential = sum(rho_y_potential*natural) / 10**6,
       
       # In CO2 emissions
       hat_co2 = sum(rho_y_hat*natural*biomass_density)/ 10**9,
@@ -189,12 +189,12 @@ recovery_counterfactual <- function(
       year %in% c(2006, 2017)
     ) |> 
     summarise(
-      # In converted area
-      real = sum(rho_1*natural),
-      e = sum(rho_y_e*natural),
-      hat = sum(rho_y_hat*natural),
-      effective = sum(rho_y_effective*natural),
-      potential = sum(rho_y_potential*natural),
+      # In converted area in MILLION HECTARES (10,000 km2)
+      real = sum(rho_1*natural) / 10**6,
+      e = sum(rho_y_e*natural) / 10**6,
+      hat = sum(rho_y_hat*natural) / 10**6,
+      effective = sum(rho_y_effective*natural) / 10**6,
+      potential = sum(rho_y_potential*natural) / 10**6,
       
       # In CO2 emissions measured in GIGATON (E+9)
       hat_co2 = sum(rho_y_hat*natural*biomass_density) / 10**9,
