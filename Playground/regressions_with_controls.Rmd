@@ -934,7 +934,7 @@ recovery_results <- x |>
 
 ## Carbon tax
 
-Calculating for a series of tar rates, measured in 2019 US$.
+Calculating for a series of tax rates, measured in 2019 US$.
 
 
 ```{r}
