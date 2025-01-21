@@ -3,9 +3,9 @@
 \begin{talltblr}[         %% tabularray outer open
 caption={Extensive Margin IV Regression Results\label{tab:main_ext}},
 note{}={* p < 0.1, ** p < 0.05, *** p < 0.01},
-note{ }={Standard errors clustered at the municipality level. Controls: Pasture suitability, market access, precipitation,
-      minimum, maximum, and mean temperature. All time varying controls have been calculated as an inter-temporal 
-      difference of the form $\beta x_{mt+1}-x_{mt}$. Precipitation in levels used as an instrument for the intertemporal difference in pasture quality.},
+note{ }={Standard errors clustered at the municipality level. Controls: Pasture suitability, market access, transportation cost,
+      average minimum and average maximum temperatures. All time varying controls have been calculated as an inter-temporal 
+      difference of the form $\beta x_{mt+1}-x_{mt}$. Palmer Drought Severity Index (PDSI) used as instrument for the intertemporal difference in pasture quality.},
 ]                     %% tabularray outer close
 {                     %% tabularray inner open
 width={1\linewidth},
@@ -26,19 +26,19 @@ hline{10}={1,2,3}{solid, black, 0.05em},
 \toprule
 & \toprule$ \log \left( \frac{\rho_{mt}}{1 - \rho_{mt}} \right)
     -\beta \log ( \rho_{mt+1} ) + \beta \gamma $ & Parameters \\ \midrule %% TinyTableHeader
-$\frac{\beta}{2}(h_{mt+1})^2$              & 0.5172***                            & $\delta$             \\
-& (0.1835)                             &                       \\
-Pasture Quality ($\beta x_{mt+1} - x_{mt})$ & 5.2166***                            & $\gamma_{pasture}^e$ \\
-& (1.6519)                             &                       \\
-$b_m$                                        & 0.0004                               & $-\alpha_b$          \\
-& (0.0003)                             &                       \\
-$(\beta + (\beta - 1) t)$                  & 0.0370                               & $\gamma_t^e$         \\
-& (0.0268)                             &                       \\
-Num.Obs.                                     & 6250                                 &                       \\
-Controls                                     & Temp.; Past.Suit.; Mkt.Acc.; Precip. &                       \\
-F (2nd stage)                                & 6.0861                               &                       \\
-F (1st stage: Past. Qual.)                   & 118.0234                             &                       \\
-Clustered SE                                 & Yes (Municipality)                   &                       \\
+$\frac{\beta}{2}(h_{mt+1})^2$              & 0.2964**                                  & $\delta$             \\
+& (0.1469)                                  &                       \\
+Pasture Quality ($\beta x_{mt+1} - x_{mt})$ & 6.8196***                                 & $\gamma_{pasture}^e$ \\
+& (0.7412)                                  &                       \\
+$b_m$                                        & 0.0011***                                 & $-\alpha_b$          \\
+& (0.0002)                                  &                       \\
+$(\beta + (\beta - 1) t)$                  & -0.0762***                                & $\gamma_t^e$         \\
+& (0.0234)                                  &                       \\
+Num.Obs.                                     & 6210                                      &                       \\
+Controls                                     & Temp.; Past.Suit.; Mkt.Acc.; Transp.Cost. &                       \\
+F (2nd stage)                                & 15.7038                                   &                       \\
+F (1st stage: Past. Qual.)                   & 715.7339                                  &                       \\
+Clustered SE                                 & Yes (Municipality)                        &                       \\
 \bottomrule
 \end{talltblr}
 \end{table}

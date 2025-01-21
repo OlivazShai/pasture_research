@@ -3,33 +3,35 @@
    \caption{\label{tab:int_fe} Intensive margin FE regression results}
    \centering
    \normalsize
-   \begin{tabularx}{\textwidth}{l *1{>{\centering\arraybackslash}X}}
+   \begin{tabularx}{\textwidth}{l *2{>{\centering\arraybackslash}X}}
       \tabularnewline \midrule \midrule
-      Dependent Variable:          & $h_{mt+1}$\\  
-                                   & \hspace{1em}\\   
+      Dependent Variable: & \multicolumn{2}{c}{$h_{mt+1}$}\\
+                                   & OLS                     & IV \\   
+                                   & \hspace{1em}            & \hspace{2em}\\   
       \midrule
       \emph{Variables}\\
-      $p_{mt}$                     & -0.0004$^{***}$\\   
-                                   & ($6.4\times 10^{-5}$)\\    
-      $p_{mt+1}$                   & 0.0004$^{***}$\\   
-                                   & ($6.18\times 10^{-5}$)\\    
-      Pasture Quality ($x_{mt+1}$) & 0.0953$^{***}$\\   
-                                   & (0.0155)\\   
-      Year                         & 0.0047$^{***}$\\   
-                                   & (0.0014)\\   
-      Temperature                  & $\checkmark$\\   
-      Past. Suit.                  & \\  
-      Mkt. Acc.                    & $\checkmark$\\   
+      $p_{mt}$                     & -0.0004$^{***}$         & -0.0004$^{***}$\\   
+                                   & ($6.4\times 10^{-5}$)   & (0.0002)\\   
+      $p_{mt+1}$                   & 0.0004$^{***}$          & 0.0004$^{**}$\\   
+                                   & ($6.18\times 10^{-5}$)  & (0.0002)\\   
+      Pasture Quality ($x_{mt+1}$) & 0.0953$^{***}$          & 0.3666$^{***}$\\   
+                                   & (0.0155)                & (0.0658)\\   
+      Year                         & 0.0047$^{***}$          & 0.0069$^{***}$\\   
+                                   & (0.0014)                & (0.0024)\\   
+      Temperature                  & $\checkmark$            & $\checkmark$\\   
+      Past. Suit.                  &                         & \\  
+      Mkt. Acc.                    & $\checkmark$            & $\checkmark$\\   
+      Transp. Cost                 &                         & \\  
       \midrule
       \emph{Fixed-effects}\\
-      Municipality                 & $\checkmark$\\   
+      Municipality                 & $\checkmark$            & $\checkmark$\\   
       \midrule
       \emph{Fit statistics}\\
-      Observations                 & 6,488\\  
-      F-test                       & 5,692.0\\  
+      Observations                 & 6,487                   & 6,487\\  
+      F-test                       & 5,689.8                 & 7,821.2\\  
       \midrule \midrule
-      \multicolumn{2}{l}{\emph{Clustered (Municipality) standard-errors in parentheses}}\\
-      \multicolumn{2}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+      \multicolumn{3}{l}{\emph{Clustered (Municipality) standard-errors in parentheses}}\\
+      \multicolumn{3}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
    \end{tabularx}
 \end{table}
 

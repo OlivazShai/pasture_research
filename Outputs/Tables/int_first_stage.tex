@@ -5,29 +5,30 @@
    \normalsize
    \begin{tabularx}{\textwidth}{l *3{>{\centering\arraybackslash}X}}
       \tabularnewline \midrule \midrule
-      Dependent Variables: & $p_{mt}$       & $p_{mt+1}$      & Pasture Quality ($x_{mt+1}$)\\  
-                           & \hspace{1em}   & \hspace{2em}    & \hspace{3em}\\   
+      Dependent Variables: & $p_{mt}$       & $p_{mt+1}$     & Pasture Quality ($x_{mt+1}$)\\  
+                           & \hspace{1em}   & \hspace{2em}   & \hspace{3em}\\   
       \midrule
       \emph{Variables}\\
-      $ssiv_{mt}$          & -16.22$^{***}$ & -17.38$^{***}$  & 0.0091$^{***}$\\   
-                           & (3.141)        & (3.362)         & (0.0018)\\   
-      $ssiv_{mt+1}$        & 10.79$^{***}$  & 11.55$^{***}$   & -0.0060$^{***}$\\   
-                           & (2.080)        & (2.224)         & (0.0012)\\   
-      Lag Precip           & -0.0463$^{**}$ & -0.0518$^{***}$ & 0.0003$^{***}$\\   
-                           & (0.0187)       & (0.0193)        & ($1.29\times 10^{-5}$)\\    
-      Year                 & 78.50$^{***}$  & 59.30$^{***}$   & 0.0055$^{***}$\\   
-                           & (0.9804)       & (1.026)         & (0.0004)\\   
-      Temperature          & $\checkmark$   & $\checkmark$    & $\checkmark$\\   
-      Past. Suit.          & $\checkmark$   & $\checkmark$    & $\checkmark$\\   
-      Mkt. Acc.            & $\checkmark$   & $\checkmark$    & $\checkmark$\\   
+      $ssiv_{mt}$          & -19.93$^{***}$ & -21.23$^{***}$ & 0.0140$^{***}$\\   
+                           & (3.417)        & (3.645)        & (0.0021)\\   
+      $ssiv_{mt+1}$        & 13.23$^{***}$  & 14.08$^{***}$  & -0.0092$^{***}$\\   
+                           & (2.261)        & (2.411)        & (0.0014)\\   
+      pdsi\_min            & 0.1117$^{***}$ & 0.1100$^{***}$ & $5.68\times 10^{-5}$$^{***}$\\    
+                           & (0.0201)       & (0.0207)       & ($1\times 10^{-5}$)\\    
+      Year                 & 79.05$^{***}$  & 59.88$^{***}$  & 0.0075$^{***}$\\   
+                           & (0.9454)       & (0.9916)       & (0.0003)\\   
+      Temperature          & $\checkmark$   & $\checkmark$   & $\checkmark$\\   
+      Past. Suit.          & $\checkmark$   & $\checkmark$   & $\checkmark$\\   
+      Mkt. Acc.            & $\checkmark$   & $\checkmark$   & $\checkmark$\\   
+      Transp. Cost         & $\checkmark$   & $\checkmark$   & $\checkmark$\\   
       \midrule
       \emph{Fixed-effects}\\
-      Biome                & $\checkmark$   & $\checkmark$    & $\checkmark$\\   
+      Biome                & $\checkmark$   & $\checkmark$   & $\checkmark$\\   
       \midrule
       \emph{Fit statistics}\\
-      Observations         & 6,488          & 6,488           & 6,488\\  
-      F-test               & 291.97         & 164.39          & 135.71\\  
-      F-test (1st stage)   & 35.894         & 34.805          & 331.52\\  
+      Observations         & 6,487          & 6,487          & 6,487\\  
+      F-test               & 309.45         & 173.59         & 98.484\\  
+      F-test (1st stage)   & 49.981         & 47.741         & 38.057\\  
       \midrule \midrule
       \multicolumn{4}{l}{\emph{Clustered (Municipality) standard-errors in parentheses}}\\
       \multicolumn{4}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\

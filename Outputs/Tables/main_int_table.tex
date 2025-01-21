@@ -3,8 +3,8 @@
 \begin{talltblr}[         %% tabularray outer open
 caption={Intensive Margin IV Regression Results\label{tab:main_int}},
 note{}={* p < 0.1, ** p < 0.05, *** p < 0.01},
-note{ }={Standard errors clustered at the municipality level. Biome fixed effects. Controls: Pasture suitability, market access, 
-      minimum, maximum, and mean temperature. Shift-share variables used as instruments for prices. Lagged precipitation used as instruments for pasture quality.},
+note{ }={Standard errors clustered at the municipality level. Biome fixed effects. Controls: Pasture suitability, market access, transportation cost,
+      average minimum and average maximum temperatures. Shift-share variables used as instruments for prices. Palmer drought severity index (PDSI) used as instrument for pasture quality.},
 ]                     %% tabularray outer close
 {                     %% tabularray inner open
 width={1\linewidth},
@@ -24,22 +24,22 @@ hline{10}={1,2,3}{solid, black, 0.05em},
 }                     %% tabularray inner close
 \toprule
 & \toprule$h_{mt+1}$ & Parameters \\ \midrule %% TinyTableHeader
-$p_{mt}$                     & -0.0120***                  & $-\dfrac{\alpha_p}{\delta \beta}$     \\
-& 0.0035                      &                                           \\
-$p_{mt+1}$                   & 0.0127***                   & $\dfrac{\alpha_p (1 + \phi)}{\delta}$ \\
-& 0.0035                      &                                           \\
-Pasture Quality ($x_{mt+1}$) & 0.2530**                    & $-\dfrac{\gamma_{pasture}}{\delta}$    \\
-& 0.1142                      &                                           \\
-Year                         & 0.1837***                   & $-\dfrac{\gamma_t}{\delta}$            \\
-& 0.0676                      &                                           \\
-Num.Obs.                     & 6488                        &                                           \\
-Controls                     & Temp.; Past.Suit.; Mkt.Acc. &                                           \\
-Fixed Effects                & Biome                       &                                           \\
-F (2nd stage)                & 101.3222                    &                                           \\
-F (1st stage: $p_{mt}$)      & 35.8945                     &                                           \\
-F (1st stage: $p_{mt+1}$)    & 34.8053                     &                                           \\
-F (1st stage: Past. Qual.)   & 331.5159                    &                                           \\
-Clustered SE                 & Yes (Municipality)          &                                           \\
+$p_{mt}$                     & -0.0188***                                & $-\dfrac{\alpha_p}{\delta \beta}$     \\
+& 0.0071                                    &                                           \\
+$p_{mt+1}$                   & 0.0198***                                 & $\dfrac{\alpha_p (1 + \phi)}{\delta}$ \\
+& 0.0071                                    &                                           \\
+Pasture Quality ($x_{mt+1}$) & 1.3111**                                  & $-\dfrac{\gamma_{pasture}}{\delta}$    \\
+& 0.5629                                    &                                           \\
+Year                         & 0.2904**                                  & $-\dfrac{\gamma_t}{\delta}$            \\
+& 0.1324                                    &                                           \\
+Num.Obs.                     & 6487                                      &                                           \\
+Controls                     & Temp.; Past.Suit.; Mkt.Acc.; Transp.Cost. &                                           \\
+Fixed Effects                & Biome                                     &                                           \\
+F (2nd stage)                & 108.51                                    &                                           \\
+F (1st stage: $p_{mt}$)      & 49.9809                                   &                                           \\
+F (1st stage: $p_{mt+1}$)    & 47.7408                                   &                                           \\
+F (1st stage: Past. Qual.)   & 38.0575                                   &                                           \\
+Clustered SE                 & Yes (Municipality)                        &                                           \\
 \bottomrule
 \end{talltblr}
 \end{table}

@@ -1,0 +1,38 @@
+
+\begin{table}[htbp]
+   \caption{\label{tab:int_first_stage} Intensive margin first stage results}
+   \centering
+   \normalsize
+   \begin{tabularx}{\textwidth}{l *1{>{\centering\arraybackslash}X}}
+      \tabularnewline \midrule \midrule
+      Dependent Variable:             & Pasture Quality ($\beta x_{mt+1} - x_{mt}$)\\   
+                                      & \hspace{1em}\\   
+      \midrule
+      \emph{Variables}\\
+      pdsi\_min                       & $-5.9\times 10^{-5}$$^{***}$\\    
+                                      & ($2.07\times 10^{-6}$)\\    
+      $\frac{\beta}{2}(h_{mt+1})^2$   & -0.0301$^{***}$\\   
+                                      & (0.0072)\\   
+      $b_m$                           & -0.0002$^{***}$\\   
+                                      & ($9.17\times 10^{-6}$)\\    
+      $(\beta + (\beta - 1) t)$       & 0.0005\\   
+                                      & (0.0010)\\   
+      Temperature                     & $\checkmark$\\   
+      Past. Suit.                     & $\checkmark$\\   
+      Mkt. Acc.                       & $\checkmark$\\   
+      Transp. Cost                    & $\checkmark$\\   
+      \midrule
+      \emph{Fixed-effects}\\
+      Biome                           & $\checkmark$\\   
+      \midrule
+      \emph{Fit statistics}\\
+      Observations                    & 6,210\\  
+      F-test                          & 106.02\\  
+      F-test (1st stage)              & 715.73\\  
+      \midrule \midrule
+      \multicolumn{2}{l}{\emph{Clustered (Municipality) standard-errors in parentheses}}\\
+      \multicolumn{2}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+   \end{tabularx}
+\end{table}
+
+

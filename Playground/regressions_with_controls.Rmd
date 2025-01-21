@@ -1616,9 +1616,19 @@ curve_sav <- tax_results |>
   
 
 # Combine the plots
-curve_sav + curve_co2
+tax_plot <- curve_sav + curve_co2
 ```
-
+```{r}
+ggsave(
+  filename = "../Outputs/Graphics/tax_plot.png", # Path to save the file
+  plot = tax_plot,                  
+  width = 9,                                   # Width in inches
+  height = 5.5,                               # Height in inches
+  units = "in",                                # Units for width/height
+  dpi = 300,                                   # Resolution (DPI for high-quality output)
+  bg = "white"                                 # Background colour
+  )
+```
 
 # Notes
 
@@ -1683,7 +1693,7 @@ extra_rows <- data.frame(
               "F (1st stage: Past. Qual.)", 
               "Clustered SE"),
   value = c(
-    "Temp.; Past.Suit.; Mkt.Acc.", 
+    "Temp.; Past.Suit.; Mkt.Acc.; Transp.Cost.", 
     "Biome", 
     get_f_stats(int_mod)[["F (2nd stage)"]], 
     get_f_stats(int_mod)[["F (1st stage: local_price)"]], 
@@ -1713,10 +1723,10 @@ modelsummary(
   notes = paste(
     "Standard errors clustered at the municipality level.",
     "Biome fixed effects.",
-    "Controls: Pasture suitability, market access, 
-      minimum, maximum, and mean temperature.",
+    "Controls: Pasture suitability, market access, transportation cost,
+      average minimum and average maximum temperatures.",
     "Shift-share variables used as instruments for prices.",
-    "Lagged precipitation used as instruments for pasture quality."
+    "Palmer drought severity index (PDSI) used as instrument for pasture quality."
   ),
   add_columns = model_parameters,
   output = "tinytable",
@@ -1776,7 +1786,7 @@ extra_rows <- data.frame(
               "F (1st stage: Past. Qual.)",
               "Clustered SE"),
   value = c(
-    "Temp.; Past.Suit.; Mkt.Acc.; Precip.",
+    "Temp.; Past.Suit.; Mkt.Acc.; Transp.Cost.",
     get_f_stats(ext_mod)[["F (2nd stage)"]],
     get_f_stats(ext_mod)[["F (1st stage: high_share_tdif)"]], 
     "Yes (Municipality)"),
@@ -1803,11 +1813,11 @@ modelsummary(
   title = "Extensive Margin IV Regression Results\\label{tab:main_ext}",
   notes = paste(
     "Standard errors clustered at the municipality level.",
-    "Controls: Pasture suitability, market access, precipitation,
-      minimum, maximum, and mean temperature.", 
+    "Controls: Pasture suitability, market access, transportation cost,
+      average minimum and average maximum temperatures.", 
     "All time varying controls have been calculated as an inter-temporal 
       difference of the form $\\beta x_{mt+1}-x_{mt}$.",
-    "Precipitation in levels used as an instrument for the intertemporal difference in pasture quality."
+    "Palmer Drought Severity Index (PDSI) used as instrument for the intertemporal difference in pasture quality."
   ),
   add_columns = model_parameters,
   output = "tinytable",
@@ -1836,7 +1846,6 @@ In this section, I will use the preferred empirical exercise to recover the stru
 
 ```{r} 
 calculate_structural_params(int_mod, ext_mod) |>
-  aggregate_structural_params() |> 
   kbl(
     digits = c(4,4,2),
     
@@ -1867,7 +1876,7 @@ calculate_structural_params(int_mod, ext_mod) |>
 
 ## Extra tables
 
-### First stage results
+### First stage intensive margin
 
 ```{r}
 coef_rename <- c(
@@ -1897,7 +1906,8 @@ etable(
     group = list(
       Temperature = c("tmmn_min", "tmmx_max", "tmmn_mean", "tmmx_mean"),
       `Past. Suit.` = "si_median",
-      `Mkt. Acc.` = "ma_norm"
+      `Mkt. Acc.` = "ma_norm",
+      `Transp. Cost` = "tc_median"
       ),
     dict = coef_rename,
     # output
@@ -1916,19 +1926,72 @@ etable(
     )
 ```
 
+### First stage extensive margin
+
+```{r}
+coef_rename <- c(
+  local_price = "$p_{mt}$",
+  local_price_2 = "$p_{mt+1}$",
+  high_share = "Pasture Quality ($x_{mt+1}$)",
+  high_share_tdif = "Pasture Quality ($\\beta x_{mt+1} - x_{mt}$)",
+  year = "Year",
+  year_tdif = "$(\\beta + (\\beta - 1) t)$",
+  ssiv = "$ssiv_{mt}$",
+  ssiv_2 = "$ssiv_{mt+1}$",
+  pr = "Lag Precip",
+  code_amc = "Municipality",
+  main_biome = "Biome",
+  biomass_density = "$b_m$",
+  mata_atlantica = "mata atlantica",
+  y = "$ \\log \\left( \\frac{\\rho_{mt}}{1 - \\rho_{mt}} \\right) -\\beta \\log ( \\rho_{mt+1} ) + \\beta \\gamma $ \\vspace{1ex}",
+  x2 = "$\\frac{\\beta}{2}(h_{mt+1})^2$",
+  h = "$h_{mt+1}$"
+  )
+
+etable(
+    ext_mod,
+    stage = 1,
+    digits = 4,
+    fitstat = ~ n + f + ivf,
+    group = list(
+      Temperature = c("tmmn_min", "tmmx_max", "tmmn_mean", "tmmx_mean"),
+      `Past. Suit.` = "si_median",
+      `Mkt. Acc.` = "ma_norm",
+      `Transp. Cost` = "tc_median"
+      ),
+    dict = coef_rename,
+    # output
+    file = "../Outputs/Tables/ext_first_stage.tex",
+    replace = T,
+    # latex configurations
+    label = "tab:int_first_stage",
+    tabular = "X",
+    style.tex = style.tex(
+      model.title = "",
+      yesNo = "$\\checkmark$",
+      fontsize = "normalsize",
+      model.format = "\\hspace{1em}"
+      ),
+    title = "Intensive margin first stage results"
+    )
+```
 
 ### Fixed efects intensive margin
 
 ```{r}
 etable(
-    ols[[4]],
+    list(
+      OLS = ols[[4]], 
+      IV = iv[[4]]
+    ),
     stage = 2,
     digits = 4,
     fitstat = ~ n + f,
     group = list(
       Temperature = c("tmmn_min", "tmmx_max", "tmmn_mean", "tmmx_mean"),
       `Past. Suit.` = "si_median",
-      `Mkt. Acc.` = "ma_norm"
+      `Mkt. Acc.` = "ma_norm",
+      `Transp. Cost` = "tc_median"
       ),
     dict = coef_rename,
     # output
@@ -1943,7 +2006,8 @@ etable(
       fontsize = "normalsize",
       model.format = "\\hspace{1em}"
       ),
-    title = "Intensive margin FE regression results"
+    title = "Intensive margin FE regression results",
+    headers = c("OLS", "IV")
     )
 ```
 
