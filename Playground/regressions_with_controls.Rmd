@@ -1316,7 +1316,7 @@ conversion_map <- ggplot() +
   ) +
   ggtitle("f. Land Conversion")
 
-conversion_map
+#conversion_map
 ```
 
 ## Aggregation
@@ -1333,6 +1333,19 @@ agg_map <- wrap_plots(
 dev.new(width = 7, height = 10.5)
 #agg_map
 ```
+
+```{r}
+ggsave(
+  filename = "../Outputs/Graphics/agg_map.png", # Path to save the file
+  plot = agg_map,                              # The patchwork object
+  width = 7,                                   # Width in inches
+  height = 10.5,                               # Height in inches
+  units = "in",                                # Units for width/height
+  dpi = 300,                                   # Resolution (DPI for high-quality output)
+  bg = "white"                                 # Background colour
+)
+```
+
 
 # Plots
 
