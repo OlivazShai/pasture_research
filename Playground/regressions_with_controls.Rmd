@@ -1454,6 +1454,92 @@ ggsave(
   )
 ```
 
+## CF - Deforestation decomposition
+
+```{r}
+decomposition_def_plot <- recovery_results |> 
+  select(
+    i,
+    sav_disincentive_pc,
+    sav_incentive_pc,
+    sav_net_pc
+  ) |> 
+  pivot_longer(
+    cols = c(
+      sav_disincentive_pc, 
+      sav_incentive_pc,
+      sav_net_pc),
+    names_to = "effect",
+    values_to = "saved",
+    names_prefix = "sav_",
+  ) |> 
+  mutate(
+    facet = if_else(
+      effect == "net_pc",
+      "Net",
+      "Decomposition"
+    ),
+    effect = factor(effect, 
+                    levels = c("disincentive_pc", "incentive_pc", "net_pc"),
+                    labels = c("Borlaug effect", "Jevons effect", "Net impact"))
+  ) |> 
+  ggplot() +
+  aes(
+    x = i,  # Keep raw values, format axes with scales
+    y = saved,  # Keep raw values, format axes with scales
+    fill = effect
+  ) +
+  geom_area(
+    alpha = 0.7, 
+    colour = NA  # No border for the areas
+  ) +
+  facet_grid(
+    cols = vars(facet),
+    scales = "fixed",
+    labeller = as_labeller(c("Decomposition" = "a. Decomposed", "Net" = "b. Aggregated"))
+  ) +
+  labs(
+    x = "High-Quality Pastures (%)",
+    y = "Prevented conversion (%)"
+  ) +
+  theme_minimal(
+    base_size = 12,
+    base_family = "LM Sans 10"
+    ) +
+  theme(
+    axis.line = element_line(color = "grey40"),
+    axis.title.x = element_text( size = 10, margin = margin(t = 10)),
+    axis.title.y = element_text( size = 10, margin = margin(r = 5)),
+    axis.text = element_text( size = 9),
+    legend.text = element_text( size = 9),
+    legend.position = "bottom",
+    legend.title = element_blank(),  # Remove legend title
+    strip.text = element_text( size = 11.5, face = "plain"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank()
+    ) +
+  scale_fill_manual(
+    values = c("Borlaug effect" = "grey70",
+               "Jevons effect" = "grey50",
+               "Net impact" = "grey30")
+  ) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +  # Format x-axis as percentages
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))   # Format y-axis as percentages
+```
+
+```{r}
+ggsave(
+  filename = "../Outputs/Graphics/decomposition_def_plot.png", # Path to save the file
+  plot = decomposition_def_plot,                  
+  width = 9,                                   # Width in inches
+  height = 5.5,                               # Height in inches
+  units = "in",                                # Units for width/height
+  dpi = 300,                                   # Resolution (DPI for high-quality output)
+  bg = "white"                                 # Background colour
+  )
+```
+
+
 ## CF - Taxes vs recovery
 
 ```{r}
@@ -1471,7 +1557,7 @@ recovery_plot <- recovery_results |>
     ) +
   labs(
     x = "High-quality pastures (%)",
-    y = "Converted Area (1000 km²)"
+    y = bquote("Converted Area ("~10^4~km^2 ~ ")")
   ) +
   theme_minimal(
     base_size = 12, 
@@ -1592,7 +1678,7 @@ curve_sav <- tax_results |>
     color = "grey35"
   ) +
   labs(
-    x = bquote("Area (1000 "~km^2 ~ ")"),
+    x = bquote("Area ("~10^4~km^2 ~ ")"),
     y = expression("Tax rate ($/tCO"[2]~")")
   ) +
   theme_minimal(
@@ -2046,6 +2132,39 @@ etable(
   )
 ```
 
+## Baseline
+
+```{r}
+tax_results |> 
+  filter(t == 0) |> 
+  select(hat, hat_co2) |> 
+  kbl(
+    col.names = c(
+      "Land conversion ($10^4 km^2$)", 
+      "Carbon emissions (Gt $CO_2$)"),
+    caption = "Baseline scenario",
+    booktabs = TRUE,
+    label = "tab:baseline",
+    digits = 4,
+    format = "latex",
+    escape = FALSE,
+    linesep = "\\addlinespace"
+  ) |> 
+  kable_styling(
+    htmltable_class =  "lightable-classic-2",
+    #full_width = TRUE
+    #latex_options = "scale_down"
+  ) %>%
+  # Add double lines
+  sub(
+    pattern = "\\\\toprule", 
+    replacement = "\\\\midrule\\\\midrule",
+    x = .
+  ) |> 
+  save_kable("../Outputs/Tables/baseline.tex")
+```
+
+
 ## Policy counterfactual table
 
 ```{r}
@@ -2086,7 +2205,7 @@ policy_summary |>
   kbl(
     col.names = c(
       "Policy",
-      "Area (1000 $km^2$)",
+      "Area ($10^4 km^2$)",
       "vs. Baseline (\\%)",
       "Volume (Gt $CO_2$)",
       "vs. Baseline (\\%)"
