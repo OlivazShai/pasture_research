@@ -713,7 +713,7 @@ ppm_ols <- feols(
   + year_tdif
   + tmmn_min_tdif + tmmx_max_tdif 
   + tmmn_mean_tdif + tmmx_mean_tdif 
-  + pr_tdif
+  + tc_median
   
   | sw(1, main_biome, code_state),
   
@@ -741,7 +741,6 @@ ppm_iv <- feols(
   + year_tdif
   + tmmn_min_tdif + tmmx_max_tdif 
   + tmmn_mean_tdif + tmmx_mean_tdif
-  + pr_tdif
   + tc_median
  
   | sw(1, main_biome, code_state)
@@ -2058,7 +2057,7 @@ etable(
       fontsize = "normalsize",
       model.format = "\\hspace{1em}"
       ),
-    title = "Intensive margin first stage results"
+    title = "Extensive margin first stage results"
     )
 ```
 
@@ -2111,7 +2110,7 @@ etable(
       Temperature = c("tmmn_min", "tmmx_max", "tmmn_mean", "tmmx_mean"),
       `Past. Suit.` = "si_median",
       `Mkt. Acc.` = "ma_norm",
-      Precipitation = "pr_tdif"
+      `Transp. Cost.` = "tc_median"
       ),
   dict = coef_rename,
   # output
