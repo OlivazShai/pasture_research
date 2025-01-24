@@ -1634,7 +1634,7 @@ curve_co2 <- tax_results |>
   filter(t <= 66) |> 
   ggplot() +
   aes(
-    x = tax,
+    x = tax_co2,
     y = t
   ) +
   geom_line(
@@ -1660,7 +1660,7 @@ curve_co2 <- tax_results |>
     panel.grid.major = element_blank(),
     legend.position = "none"
   ) +
-  scale_x_continuous(labels = scales::number_format(accuracy = 1)) +
+  scale_x_continuous(labels = scales::number_format(accuracy = 0.1)) +
   scale_y_continuous(labels = scales::number_format(accuracy = 1)) +
   ggtitle("a. Carbon Emissions")
 
@@ -1806,6 +1806,7 @@ modelsummary(
   add_rows = extra_rows,
   title = "Intensive Margin IV Regression Results\\label{tab:main_int}",
   notes = paste(
+    "\\footnotesize",
     "Standard errors clustered at the municipality level.",
     "Biome fixed effects.",
     "Controls: Pasture suitability, market access, transportation cost,
@@ -1816,7 +1817,7 @@ modelsummary(
   add_columns = model_parameters,
   output = "tinytable",
   escape = FALSE,
-  width = 1
+  width = 0.9
   ) |>
   style_tt(
     tabularray_inner = "
@@ -1824,6 +1825,9 @@ modelsummary(
       row{2,4,6,8} = {abovesep = 5pt, belowsep = -7pt},
       column{3} = {valign = b}
       "
+    ) |>
+  style_tt(
+    fontsize = 1
     ) |> 
   save_tt(
     output = "../Outputs/Tables/main_int_table.tex",
@@ -1897,17 +1901,18 @@ modelsummary(
   add_rows = extra_rows,
   title = "Extensive Margin IV Regression Results\\label{tab:main_ext}",
   notes = paste(
+    "\\footnotesize",
     "Standard errors clustered at the municipality level.",
     "Controls: Pasture suitability, market access, transportation cost,
       average minimum and average maximum temperatures.", 
     "All time varying controls have been calculated as an inter-temporal 
       difference of the form $\\beta x_{mt+1}-x_{mt}$.",
     "Palmer Drought Severity Index (PDSI) used as instrument for the intertemporal difference in pasture quality."
-  ),
+    ),
   add_columns = model_parameters,
   output = "tinytable",
   escape = FALSE,
-  width = 1
+  width = 0.9
     ) |>
   style_tt(
     tabularray_inner = "
@@ -2049,7 +2054,7 @@ etable(
     file = "../Outputs/Tables/ext_first_stage.tex",
     replace = T,
     # latex configurations
-    label = "tab:int_first_stage",
+    label = "tab:ext_first_stage",
     tabular = "X",
     style.tex = style.tex(
       model.title = "",
