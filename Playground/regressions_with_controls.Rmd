@@ -860,6 +860,55 @@ ext_cf <- ext_data_complete |>
   ) 
 ```
 
+## Real and predicted baselines
+
+```{r}
+b <- recovery_counterfactual(
+    int_mod, 
+    ext_mod, 
+    int_data,
+    ext_cf, 
+    min_high_share = i,
+    beta = beta
+    ) |>
+    filter(
+      type == "static"
+    ) |> 
+  select(
+    hat, hat_co2,
+    real, real_co2
+  ) |> 
+  mutate(
+    hat_error = hat/real -1,
+    co2_error = hat_co2/real_co2 -1
+  )
+
+b_conversion <- b |> 
+  select(hat, real, hat_error) |> 
+  rename(
+    predicted = hat,
+    observed = real,
+    error = hat_error
+  )
+
+b_co2 <- b |> 
+  select(hat_co2, real_co2, co2_error)|> 
+  rename(
+    predicted = hat_co2,
+    observed = real_co2,
+    error = co2_error
+  )
+
+baseline_results <- bind_rows(
+  list( 
+    "conversion" = b_conversion,
+    "co2" = b_co2
+    ),
+  
+  .id = "variable"
+)
+```
+
 
 ## Pasture recovery
 
@@ -2139,16 +2188,20 @@ etable(
 ## Baseline
 
 ```{r}
-tax_results |> 
-  filter(t == 0) |> 
-  select(hat, hat_co2) |> 
+baseline_results |> 
+  mutate(
+    variable = c("Land conversion ($10^4 km^2$)", "Carbon emissions (Gt $CO_2$)")
+  ) |>
   kbl(
     col.names = c(
-      "Land conversion ($10^4 km^2$)", 
-      "Carbon emissions (Gt $CO_2$)"),
+      "Variable",
+      "Predicted",
+      "Observed",
+      "Relative error"
+    ),
     caption = "Baseline scenario",
     booktabs = TRUE,
-    label = "tab:baseline",
+    label = "baseline",
     digits = 4,
     format = "latex",
     escape = FALSE,

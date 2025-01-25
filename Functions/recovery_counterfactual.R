@@ -178,7 +178,8 @@ recovery_counterfactual <- function(
       effective = sum(rho_y_effective*natural) / 10**6,
       potential = sum(rho_y_potential*natural) / 10**6,
       
-      # In CO2 emissions
+      # In CO2 emissions in GIGATON
+      real_co2 = sum(rho_1*natural*biomass_density)/ 10**9,
       hat_co2 = sum(rho_y_hat*natural*biomass_density)/ 10**9,
       effective_co2 = sum(rho_y_effective*natural*biomass_density)/ 10**9,
       potential_co2 = sum(rho_y_potential*natural*biomass_density)/ 10**9
@@ -197,6 +198,7 @@ recovery_counterfactual <- function(
       potential = sum(rho_y_potential*natural) / 10**6,
       
       # In CO2 emissions measured in GIGATON (E+9)
+      real_co2 = sum(rho_1*natural*biomass_density)/ 10**9,
       hat_co2 = sum(rho_y_hat*natural*biomass_density) / 10**9,
       effective_co2 = sum(rho_y_effective*natural*biomass_density) / 10**9,
       potential_co2 = sum(rho_y_potential*natural*biomass_density) / 10**9
