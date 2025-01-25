@@ -2270,7 +2270,7 @@ policy_summary |>
     caption = "Summary of prevented land conversion and $CO_2$ emissions in policy counterfactuals",
     align = "lrrrr",
     booktabs = TRUE,
-    label = "tab:policy_summary",
+    label = "policy_summary",
     digits = c(NA, 2, 1, 2, 1),
     format = "latex",
     escape = FALSE,
@@ -2285,8 +2285,8 @@ policy_summary |>
     #full_width = TRUE
     latex_options = "scale_down"
   ) |> 
-  pack_rows("Pasture Recovery", 1, 4) |> 
-  pack_rows("Carbon Tax", 5, 11) |>
+  pack_rows("A: Pasture Recovery", 1, 4) |> 
+  pack_rows("B: Carbon Tax", 5, 11) |>
   footnote(
     general = "This table presents results for prevented land conversion of natural vegetation to pasture and prevented $CO_2$ emissions for different levels of pasture recovery and different rates of carbon tax. The columns (3) and (5) represent, respectively, the prevented conversions and prevented emissions with respect to baseline conversion and emission estimates.",
     general_title = "",
