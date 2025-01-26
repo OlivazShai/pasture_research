@@ -4,7 +4,11 @@ A repository for my research on pastures in Brazil. I organized it as follows:
 
 ## Code 
 
-This folder houses the main code for the analysis, in Rmarkdown and Jupyter Notebooks. They have been compartimentalized thematically, with each file serving as a standalone piece of code, that imports all necessary files and functions when needed. Replicators should, ideally, run them in the numbered order. This is not essential, since nearly all the dataframes created throughout this research have been stored in the ```Variables``` folder, but it assures they are updated properly. It also certifies the creation of important intermediary files that were too heavy for uploading to Github. *Attention: running the entire repository can (and likely will) take many hours.* Replicators interested in running only the regressions can head towards the .Rmd file named accordingly, which can run independently. The files in this folder are:
+This folder houses the main code for the analysis, in Rmarkdown and Jupyter Notebooks. They have been compartimentalized thematically, with each file serving as a standalone piece of code, that imports all necessary files and functions when needed. 
+
+Replicators should, ideally, run them in the numbered order. This is not essential, since nearly all the dataframes created throughout this research have been stored in the ```Variables``` folder, but it assures they are updated properly. It also certifies the creation of important intermediary files that were too heavy for uploading to Github. 
+
+*Attention: running the entire repository can (and likely will) take many hours.* Replicators interested in running only the regressions can head towards the .Rmd file named accordingly, which can run independently. The files in this folder are:
 
 - 1_geo_data
 - 2_price_data
