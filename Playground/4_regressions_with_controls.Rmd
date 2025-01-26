@@ -1,0 +1,2408 @@
+---
+title: "Data Unification"
+author: "Shai Vaz"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+options(knitr.kable.NA = '')
+```
+
+```{r, include=FALSE}
+# Table
+library(kableExtra)
+library(tinytable)
+
+# Graphics
+library(ggplot2)
+library(ggpattern)
+library(scales)
+library(extrafont)
+library(patchwork)
+
+# Geographic
+library(sf)
+
+# Econometrics
+library(fixest)
+library(ivreg)
+library(modelsummary)
+
+# Data Wrangling
+library(dplyr)
+library(readr)
+library(tidyr)
+library(stringr)
+library(readxl)
+library(forcats)
+library(purrr)
+
+# Personal functions
+source("../Functions/bulk_rds.R")
+source("../Functions/recovery_counterfactual.R")
+source("../Functions/tax_counterfactual.R")
+source("../Functions/structural_parameters.R")
+```
+
+# Importing files
+
+```{r}
+bulk_read_rds(
+  # geographic
+  muni_to_amc,
+  amc_1991_2022,
+  brazil,
+  # prices
+  national_prices,
+  cattle_prices_cepea_in_census_years,
+  ipca_census_years,
+  # census data
+  agg_census_data,
+  # survey data
+  cattle_heads_ppm,
+  # instruments
+  ssiv,
+  # controls
+  tc_by_amc,
+  ma_long,
+  si_by_amc,
+  # mapbiomas
+  land_cover_agg,
+  transition_agg,
+  past_qual,
+  # carbon biomass
+  biomass
+  )
+```
+
+Read terraclimate climatic controls. 
+
+```{r}
+terraclimate <- read_csv(
+  "../Variables/terraclimate.csv", 
+  col_types = "cnnnnnnnn")
+```
+
+# Discount factor
+
+```{r}
+beta = 0.9
+```
+
+# Intensive margin
+
+
+## I.M. Database
+
+```{r}
+int_data <- left_join(
+  # first I join shifters with prices
+  # then I extract data from t+1
+  ssiv |> 
+    select(code_amc, year, area_amc, ssiv),
+  
+  cattle_prices_cepea_in_census_years,
+  
+  by = c("year" = "census_year")
+  ) |> 
+  ########## get next period prices and shifters
+  mutate(
+    mean_price_2 = if_else(
+      year == 2006 | year == 2017,
+      lead(mean_price),
+      NA),
+    
+    mean_nominal_price_2 = if_else(
+      year == 2006 | year == 2017,
+      lead(mean_nominal_price),
+      NA),
+    
+    ssiv_2 = if_else(
+      year == 2006 | year == 2017,
+      lead(ssiv),
+      NA)
+  ) |>
+  ############ join with census data
+  right_join(
+    agg_census_data,
+    
+    by = c("code_amc", "year")
+  ) |>
+    # drop observations without cattle sales
+  filter(
+    ! is.na(av_price_slaughter)
+  ) |> 
+    # calculate normalized head count (intensity)
+  mutate(
+    h = cattle_heads_big/area_amc
+  ) |> 
+  ############ join with inflation
+  left_join(
+    ipca_census_years,
+    
+    by = c("year" = "census_year")
+  ) |> 
+  ############ deflate and project ahead local prices
+             # using IPCA ratio (index_2022/index)
+  mutate(
+    local_price = av_price_slaughter * (index_2022/index)
+                  *1000,
+    
+    local_price_2 = av_price_slaughter *(index_2022/index)
+                    *(mean_price_2/mean_price)*1000,
+  ) |> 
+  ############# include controls
+  left_join(
+    tc_by_amc,
+    by = "code_amc"
+  ) |> 
+  left_join(
+    ma_long,
+    by = c("code_amc", "year")
+  ) |> 
+  left_join(
+    si_by_amc,
+    by = "code_amc"
+  ) |> 
+  ############ include land use
+  left_join(
+    land_cover_agg,
+    
+    by = c("code_amc", "year")
+  ) |> 
+              # calculate pasture share (in t and only in 2006)
+  mutate(
+    past_share = if_else(is.na(pasture), 0, pasture/area_amc),
+    
+    pasture_2006 = if_else(year == 2006, pasture, lag(pasture)),
+    
+    past_share_2006 = if_else(is.na(pasture_2006), 0, pasture_2006/area_amc)
+  ) |> 
+  ############ include pasture quality
+  left_join(
+    past_qual |> 
+            ####### testing lead high share
+            mutate( 
+              .by = code_amc,
+              high_share = dplyr::lead(high_share)
+            ),
+    by = c("code_amc", "year")
+  ) |>
+            # filter out one NA on total pastures
+            # only case is Afuá-PA (in Marajó island)
+  filter(
+    ! is.na(total)
+  ) |> 
+  ########### include carbon biomass
+  left_join(
+    biomass,
+    by = "code_amc"
+  ) |> 
+            # calculate carbon density in CO2
+            # uses atomic weight of C (12) and CO2 (44)
+            # and the fact that biomass is about 50% C
+  mutate(
+    biomass_co2 = (biomass/2)*(44/12),
+    biomass_density = biomass_co2/area_amc
+  ) |> 
+  ############ terraclimate controls
+  left_join(
+    terraclimate,
+    
+    by = c("code_amc", "year")
+  ) |> 
+  ########### remove NA in transport cost
+  # it is NA for Conde - PB
+  filter(
+    !is.na(tc_median)
+  )
+```
+
+
+## IV 
+
+```{r}
+iv <- feols(
+  data = int_data,
+  h ~
+    ma_norm
+  + si_median
+  + year
+#  + tmmn_min + tmmx_max
+  + tmmn_mean + tmmx_mean
+  + tc_median
+
+  | sw(1,main_biome, code_state, code_amc)
+  
+  | local_price + local_price_2 + high_share ~ ssiv + ssiv_2 + pdsi_min,
+  
+  panel.id = c("code_amc","year"),
+  cluster = "code_amc"
+  )
+
+etable(
+  iv, 
+  stage=2, 
+  digits = 4,
+  fitstat = ~ n + f + ivf)
+```
+
+Etable with phi, for checks. 
+
+```{r, eval=FALSE}
+phi_iv = function(x) {
+  # Extract coefficients
+  coefs <- coef(x)
+  
+  # Calculate phi
+  phi <- - coefs["fit_local_price_2"] / (beta * coefs["fit_local_price"]) - 1
+  
+  # Return phi value
+  return(phi)
+}
+
+extralines_register("phi_iv", phi_iv, "phi")
+
+
+etable(
+  iv, 
+  stage = 2, 
+  digits = 4,
+  fitstat = ~ n + f + ivf,
+  extralines = ~ phi_iv
+)
+
+```
+
+
+## OLS 
+
+```{r}
+ols <- feols(
+  data = int_data,
+  h ~
+    local_price
+  + local_price_2
+  + high_share
+  + ma_norm
+  + si_median
+  + year
+  + tmmn_min
+  + tmmx_max 
+  + tmmn_mean
+  + tmmx_mean
+  
+  + high_share
+  
+  | sw(1,main_biome,code_state, code_amc),
+  panel.id = c("code_amc","year"),
+  cluster = "code_amc"
+  )
+
+etable(
+  ols, 
+  stage=2, 
+  digits = 5,
+  fitstat = ~ n + f + ivf
+  )
+```
+
+
+```{r, eval=FALSE}
+phi_ols = function(x) {
+  # Extract coefficients
+  coefs <- stats::coef(x)
+  
+  # Calculate phi
+  phi <- ( - coefs["local_price_2"] ) / (beta * coefs["local_price"]) - 1
+  
+  # Return phi value
+  return(phi)
+}
+
+extralines_register("phi_ols", phi_ols, "phi")
+
+etable(
+  ols, 
+  stage = 2, 
+  digits = 4,
+  fitstat = ~ n + f + wf + r2 + wr2 + ar2,
+  extralines = ~ phi_ols
+)
+
+```
+
+## Poisson
+
+```{r, eval=FALSE}
+pois <- feglm(
+  data = int_data,
+  h ~
+    local_price
+  + local_price_2
+  + high_share
+  + ma_norm
+  + si_median
+  + year
+  + tmmn_min
+  + tmmx_max 
+  + tmmn_mean
+  + tmmx_mean
+  + high_share
+  
+  | sw(1, main_biome, code_state, code_amc),
+  panel.id = c("code_amc", "year"),
+  cluster = "code_amc",
+  family = "poisson"  # Specifies Poisson regression
+)
+
+etable(pois)
+```
+# Extensive margin
+
+## E.M. Database
+
+Import Euler-Mascheroni constant:
+
+```{r}
+gamma = -digamma(1)
+```
+
+Create a function to calculate the intertemporal difference $\beta x_{mt+1} - x_{mt}$:
+
+```{r}
+tdif = \(x) beta * dplyr::lead({{x}}) - {{x}} 
+```
+
+
+```{r}
+# This version has the whole time series
+ext_data_complete <- transition_agg |> 
+  ############# get transition probabilities
+  select(
+    code_amc,
+    year = year_from,
+    rho_1 = natural_pasture
+  ) |> 
+  mutate(
+    rho_2 = lead(rho_1),
+    rho_3 = lead(rho_1, 2),
+    rho_lag = lag(rho_1),
+    .by = code_amc
+  ) |> 
+  ########### include ssiv
+  left_join(
+    ssiv |>  select(code_amc, area_amc, ssiv, year),
+    
+    by = c("code_amc", "year")
+  ) |> 
+  ############ join with census data
+  left_join(
+    agg_census_data |> 
+      select(
+        year,
+        code_amc, 
+        main_biome,
+        cattle_heads,
+        cattle_heads_big
+      ),
+    
+    by = c("code_amc", "year")
+  ) |> 
+  # calculate normalized head count (intensity)
+  mutate(
+    h = cattle_heads_big/area_amc
+  ) |>
+  ############# include controls
+  left_join(
+    tc_by_amc, #|> select(code_amc, tc_mean, tc_median),
+    by = "code_amc"
+  ) |> 
+  left_join(
+    ma_long,
+    by = c("code_amc", "year")
+  ) |> 
+  left_join(
+    si_by_amc, #|> select(code_amc, si_mean, si_median),
+    by = "code_amc"
+  ) |>
+  ############ include land use
+  left_join(
+    land_cover_agg,
+    
+    by = c("code_amc", "year")
+  )  |> 
+  ############ include pasture quality
+  left_join(
+    past_qual,
+    by = c("code_amc", "year")
+  ) |> 
+  ############ terraclimate controls
+  left_join(
+    terraclimate,
+    
+    by = c("code_amc", "year")
+  )|> 
+  ########### include carbon biomass
+  left_join(
+    biomass,
+    by = "code_amc"
+  ) |> 
+  # calculate carbon density in CO2
+  mutate(
+    biomass_co2 = (biomass/2)*(44/12),
+    biomass_density = biomass_co2/area_amc
+  ) |> 
+  ############# calculate regression variables
+  # difference in cost factors
+  mutate(
+    .by = "code_amc",
+    across(
+      .cols = c(high_share, tmmn_min:tmmx_mean, pr),
+      .fns = tdif,
+      .names = "{.col}_tdif"
+      )
+  ) |> 
+  mutate(
+    .by = "code_amc",
+    
+    pr_lag = lag(pr),
+    ssiv_lag = lag(ssiv),
+    
+    y = log(rho_1/(1-rho_1)) - beta* log(rho_2) + beta*gamma,
+    
+    x1 = 0.45*(cattle_heads_big**2),
+    
+    x2 = 0.45*(h)**2,
+    
+    x3 = 0.45*(cattle_heads_big/pasture)**2,
+    
+    x4 = 0.45*(cattle_heads/area_amc)**2,
+    
+    x5 = 0.45*(cattle_heads/pasture)**2,
+    
+    year_tdif = (beta + (beta - 1) * year)
+  ) 
+
+# this is the version for the regressions
+ext_data <- ext_data_complete |> 
+  ########## remove probability 0 and 1 (impossible log odds)
+  filter(
+    rho_1 != 0 &
+    rho_1 != 1 &
+    rho_2 != 0 
+  ) |> 
+  ########## filter to census years
+  filter(
+    year == 2006 | year == 2017
+  ) |> 
+  ########## remove NA
+  filter(
+    !is.na(x2)
+  ) 
+```
+
+
+## IV with Census
+
+```{r}
+ext_iv <- feols(
+  data = ext_data,
+  y ~ 
+  x2
+#  + high_share_tdif
+  + ma_norm
+  + si_median
+  + biomass_density
+  + year_tdif
+#  + tmmn_min_tdif + tmmx_max_tdif 
+  + tmmn_mean_tdif + tmmx_mean_tdif
+#  + pr_tdif 
+  + tc_median
+    
+  | sw(1,main_biome, code_state)
+  | high_share_tdif ~ pdsi_min,
+  
+  panel.id = c("code_amc","year"),
+  cluster = "code_amc"
+  )
+
+etable(
+  ext_iv,
+  fitstat = ~ n + f + ivf
+  )
+```
+
+## OLS with census
+
+```{r}
+ext_ols <- feols(
+  data = ext_data,
+  y ~ 
+  x2
+  + high_share_tdif
+  + biomass_density
+  + ma_norm
+  + si_median
+  + year_tdif
+#  + tmmn_min_tdif + tmmx_max_tdif 
+  + tmmn_mean_tdif + tmmx_mean_tdif
+#  + pr_tdif
+  + tc_median
+
+  | sw(1,main_biome, code_state),
+  
+  
+  panel.id = c("code_amc","year"),
+  cluster = "code_amc"
+  )
+
+etable(
+  ext_ols,
+  fitstat = ~ n + f + ivf
+  )
+```
+
+# PPM version
+
+## PPM Database
+
+```{r}
+ch_ppm_amc <- cattle_heads_ppm |> 
+  ########### get PPM data
+  left_join(
+    muni_to_amc |> select(-name_muni),
+    by = join_by(code_muni)
+  ) |> 
+  ########### aggregate by AMC
+  summarise(
+    .by = c("code_amc", "year"),
+    
+    cattle_heads = sum(cattle_heads, na.rm = TRUE),
+    main_biome = unique(main_biome)
+  ) |> 
+  mutate(
+    year = as.numeric(year)
+  )
+```
+
+```{r}
+ext_ppm_complete <- transition_agg |> 
+  ############# get transition probabilities
+  select(
+    code_amc,
+    year = year_from,
+    rho_1 = natural_pasture
+  ) |> 
+  mutate(
+    rho_2 = lead(rho_1),
+    .by = code_amc
+  ) |> 
+  ########### include ssiv
+  left_join(
+    ssiv |>  select(code_amc, area_amc, ssiv, year),
+    
+    by = c("code_amc", "year")
+  ) |> 
+  ############ join with PPM data
+  left_join(
+    ch_ppm_amc,
+    
+    by = c("code_amc", "year")
+  ) |> 
+  # calculate normalized head count (intensity)
+  mutate(
+    h = cattle_heads/area_amc
+  ) |>
+  ############# include controls
+  left_join(
+    tc_by_amc |> select(code_amc, tc_mean, tc_median),
+    by = "code_amc"
+  ) |>  
+  left_join(
+    si_by_amc |> select(code_amc, si_mean, si_median),
+    by = "code_amc"
+  ) |>
+  # join with market access for 2010
+  left_join(
+    ma_long |> 
+      filter(year_ma == 2010) |> 
+      select(-year_ma, -year),
+    
+    by = "code_amc"
+  ) |>
+  ############ include land use
+  left_join(
+    land_cover_agg,
+    
+    by = c("code_amc", "year")
+  )  |> 
+  ############ include pasture quality
+  left_join(
+    past_qual,
+    by = c("code_amc", "year")
+  ) |> 
+  ############ terraclimate controls
+  left_join(
+    terraclimate,
+    
+    by = c("code_amc", "year")
+  )|> 
+  ########### include carbon biomass
+  left_join(
+    biomass,
+    by = "code_amc"
+  ) |> 
+  # calculate carbon density in CO2
+  mutate(
+    biomass_co2 = (biomass/2)*(44/12),
+    biomass_density = biomass_co2/area_amc
+  ) |> 
+  ############# calculate regression variables
+  # difference in cost factors
+  mutate(
+    .by = "code_amc",
+    across(
+      .cols = c(high_share, tmmn_min:tmmx_mean, pr),
+      .fns = tdif,
+      .names = "{.col}_tdif"
+      )
+  ) |> 
+  mutate(
+    .by = "code_amc",
+    
+    pr_lag = dplyr::lag(pr),
+    
+    y = log(rho_1/(1-rho_1)) - beta* log(rho_2) + beta*gamma,
+    
+    x2 = 0.45*(cattle_heads/area_amc)**2,
+    
+    x3 = 0.45*(cattle_heads/pasture)**2,
+    
+    year_tdif = (beta + (beta - 1) * year)
+  ) 
+
+
+ext_ppm = ext_ppm_complete |> 
+  ############# remove probability 0 and 1 (impossible log odds)
+  filter(
+    rho_1 != 0 &
+    rho_1 != 1 &
+    rho_2 != 0 
+  ) |> 
+  filter(
+    !is.na(x2),
+    !is.na(high_share)
+  )
+```
+
+
+## OLS with PPM
+
+```{r}
+ppm_ols <- feols(
+  data = ext_ppm,
+  y ~ x2
+  + high_share_tdif
+  + biomass_density
+  + ma_norm
+  + si_median
+  + year_tdif
+  + tmmn_min_tdif + tmmx_max_tdif 
+  + tmmn_mean_tdif + tmmx_mean_tdif 
+  + tc_median
+  
+  | sw(1, main_biome, code_state),
+  
+  
+  panel.id = c("code_amc","year"),
+  cluster = "code_amc",
+  )
+
+
+etable(
+  ppm_ols,
+  fitstat = ~ n + f + wf + r2)
+```
+
+## IV with PPM
+
+```{r}
+ppm_iv <- feols(
+  data = ext_ppm,
+  y ~ 
+    x2
+  + biomass_density
+  + ma_norm
+  + si_median
+  + year_tdif
+  + tmmn_min_tdif + tmmx_max_tdif 
+  + tmmn_mean_tdif + tmmx_mean_tdif
+  + tc_median
+ 
+  | sw(1, main_biome, code_state)
+  | high_share_tdif ~ pdsi_min,
+  
+  
+  panel.id = c("code_amc","year"),
+  cluster = "code_amc"
+  )
+
+etable(
+  ppm_iv, 
+  stage = 2,
+  fitstat = ~ n + f + f.p + ivf + ivf.p)
+```
+
+# Selected models
+
+```{r}
+######### Int margin - IV model with Biome FE
+int_mod <- iv[[2]]
+
+######### Ext margin - OLS model with Biome FE
+ext_mod <- ext_iv[[2]]
+```
+
+# Counterfactuals
+
+To calculate a counterfactual, I'll choose a pair of models of each margin. Then, I predict the int margin model with real data, and compare the prediction to when a I make a variation in the data.
+
+I calculate the ext margin model for the predicted headcount and for the counterfactual. Probability for the year two-ahead remains the same because it is forward looking.
+
+## CF database
+
+I construct a database for the extensive margin, where I also get results from 2007 and 2018, using PPM data to expand the series one year ahead. This dataframe needs to be an intersection of `ext_data` and `int_data`, expanded one year ahead. Before creating the main dataframe, I create an identifier with the code_amc from the int_margin dataframe and the years extended by one. 
+
+```{r}
+int_data_identifier <- int_data |> 
+  select(code_amc, year) |> 
+  mutate(year_2 = year + 1) |> 
+  pivot_longer(
+    cols = c(year, year_2),
+    names_to = NULL,
+    values_to = "year"
+  )
+```
+
+
+```{r}
+ext_cf <- ext_data_complete |>
+  # remove columns that will be changed
+  select(
+    - c(main_biome, cattle_heads)
+  ) |>
+  # join with ppm data
+  left_join(
+    ch_ppm_amc,
+    by = c("code_amc", "year")
+  ) |> 
+  # calculate delta_cattle_heads and next year cattle_heads_big
+  # also calculate the next period high_share
+  mutate(
+    .by = "code_amc",
+    
+    delta_cattle_heads = cattle_heads/lag(cattle_heads),
+    
+    cattle_heads_big = if_else(
+      # if year after census
+      year %in% c(2007, 2018),
+      # use PPM ch growth
+      lag(cattle_heads_big) * delta_cattle_heads,
+      # else keep usual ch
+      cattle_heads_big),
+    
+    high_share_2 = lead(high_share),
+    .before = "high_share"
+    ) |>
+  # filter for census years and the following year
+  filter(
+    year %in% c(2006:2007, 2017:2018)
+  ) |> 
+  # remove impossible probabilities in both years and keep the intersection
+  filter(
+    (year %in% c(2006, 2017) & 
+       rho_1 != 0 &
+       rho_1 != 1 &
+       rho_2 != 0 &
+       rho_2 != 1 &
+       rho_3 != 0) | 
+      (year %in% c(2007, 2018) &
+         rho_lag != 0 & 
+         rho_lag != 1 &
+         rho_1 != 0 & 
+         rho_1 != 1 &
+         rho_2 != 0)
+  ) |> 
+  # recalculate main variables
+  mutate(
+    h = cattle_heads_big/area_amc,
+    x2 = 0.45*(h)**2,
+    y = log(rho_1/(1-rho_1)) - beta* log(rho_2) + beta*gamma
+  ) |> 
+  # fill ma_norm
+  group_by(
+    code_amc
+  ) |> 
+  fill(
+    ma_norm, 
+    .direction = "down"
+  ) |> 
+  ungroup(
+  ) |> 
+  # intersect with the identifier from intensive margin data
+  semi_join(
+    int_data_identifier,
+    by = c("code_amc", "year")
+  ) 
+```
+
+## Real and predicted baselines
+
+```{r}
+b <- recovery_counterfactual(
+    int_mod, 
+    ext_mod, 
+    int_data,
+    ext_cf, 
+    min_high_share = i,
+    beta = beta
+    ) |>
+    filter(
+      type == "static"
+    ) |> 
+  select(
+    hat, hat_co2,
+    real, real_co2
+  ) |> 
+  mutate(
+    hat_error = hat/real -1,
+    co2_error = hat_co2/real_co2 -1
+  )
+
+b_conversion <- b |> 
+  select(hat, real, hat_error) |> 
+  rename(
+    predicted = hat,
+    observed = real,
+    error = hat_error
+  )
+
+b_co2 <- b |> 
+  select(hat_co2, real_co2, co2_error)|> 
+  rename(
+    predicted = hat_co2,
+    observed = real_co2,
+    error = co2_error
+  )
+
+baseline_results <- bind_rows(
+  list( 
+    "conversion" = b_conversion,
+    "co2" = b_co2
+    ),
+  
+  .id = "variable"
+)
+```
+
+
+## Pasture recovery
+
+Calculating in a loop, in increments of 0.01.
+
+```{r}
+x <- tibble(
+  i = double(), 
+  hat = double(),
+  effective = double(),
+  potential = double(),
+  hat_co2 = double(),
+  effective_co2 = double(),
+  potential_co2 = double(),
+  )
+
+for (i in seq(0, 1, 0.01)) {
+  
+  if(i %in% c(0,0.2,0.4,0.6,0.8)) {
+    cat(" ", i)
+    }
+  
+  result <- recovery_counterfactual(
+    int_mod, 
+    ext_mod, 
+    int_data,
+    ext_cf, 
+    min_high_share = i,
+    beta = beta
+    ) |>
+    filter(
+      type == "static"
+    ) |>
+    select(
+      hat,
+      effective,
+      potential,
+      hat_co2,
+      effective_co2,
+      potential_co2
+    )
+  
+  x <- x |> 
+    rows_append(
+      tibble(i = i, result) 
+    )
+}
+
+recovery_results <- x |> 
+  mutate(
+    # land area SAVED
+    sav_disincentive = hat - potential,
+    sav_incentive = potential - effective,
+    sav_net = hat - effective,
+    
+    sav_disincentive_pc = sav_disincentive/hat,
+    sav_incentive_pc = sav_incentive/hat,
+    sav_net_pc = sav_net/hat,
+    
+    # carbon ABATEMENT
+    co2_disincentive = hat_co2 - potential_co2,
+    co2_incentive = potential_co2 - effective_co2,
+    co2_net = hat_co2 - effective_co2,
+    
+    co2_disincentive_pc = co2_disincentive/hat_co2,
+    co2_incentive_pc = co2_incentive/hat_co2,
+    co2_net_pc = co2_net/hat_co2
+  )
+```
+
+
+## Carbon tax
+
+Calculating for a series of tax rates, measured in 2019 US$.
+
+
+```{r}
+x <- tibble(
+  t = double(), 
+  hat = double(),
+  hat_co2 = double(),
+  tax = double(),
+  tax_co2 = double(),
+  )
+
+for (t in c(
+      seq(0, 2, 0.05),
+      seq(2.1, 10, 0.1),
+      seq(10.5, 20, 0.5),
+      seq(21, 70, 1)
+    )
+  ) {
+  # counter (in tens)
+  if(t %in% c(0,1.1,5.5,11,25,70)) {
+    cat(" ", t)
+    }
+  
+  result <- tax_counterfactual(int_mod,ext_mod,int_data,ext_cf,
+                               tax = t)
+  
+  x <- x |> 
+    rows_append(
+      tibble(t = t, result) 
+    )
+}
+
+tax_results <- x |> 
+  mutate(
+    # land area SAVED
+    sav_tax = hat - tax,
+    sav_tax_pc = sav_tax/hat,
+    
+    # carbon ABATEMENT
+    co2_tax = hat_co2 - tax_co2,
+    co2_tax_pc = co2_tax/hat_co2
+  )
+```
+
+# Fonts
+
+```{r}
+# font_import(pattern = "^lmsans.*") 
+# fonttable() |>  View()
+loadfonts()
+```
+
+
+# Maps
+
+## Data
+
+```{r}
+price_map_data <- right_join(
+  amc_1991_2022 |> 
+    select(-area_amc),
+  
+  int_data |>
+    select(code_amc, year, local_price) |> 
+    filter(year == 2017),
+    by = c("code_amc")
+  )
+
+cattle_map_data <- right_join(
+  amc_1991_2022 |> 
+    select(-area_amc),
+  
+  int_data |>
+    select(code_amc, year, cattle_heads_big) |> 
+    filter(year == 2017, cattle_heads_big >0),
+    by = c("code_amc")
+  )
+
+biomass_map_data <- right_join(
+  amc_1991_2022 |> 
+    select(-area_amc),
+  
+  ext_data |>
+    select(code_amc, year, biomass_density) |> 
+    filter(year == 2017),
+    by = c("code_amc")
+  )
+
+si_map_data <- right_join(
+  amc_1991_2022 |> 
+    select(-area_amc),
+  
+  ext_data |>
+    select(code_amc, year, si_median) |> 
+    filter(year == 2017),
+    by = c("code_amc")
+  )
+
+high_share_map_data <- right_join(
+  amc_1991_2022 |> 
+    select(-area_amc),
+  
+  ext_data |>
+    select(code_amc, year, high_share) |> 
+    filter(year == 2017),
+    by = c("code_amc")
+  )
+
+conversion_map_data <- right_join(
+  amc_1991_2022 |> 
+    select(-area_amc),
+  
+  ext_data |>
+    select(code_amc, year, natural, rho_1) |>
+    summarise(conversion = sum(natural*rho_1, na.rm = T), .by = "code_amc"),
+    by = c("code_amc")
+  )
+
+conversion_map_data_2 <- right_join(
+  amc_1991_2022 |> 
+    select(-area_amc),
+  
+  ext_data |>
+    select(code_amc, year, rho_1) |> 
+    filter(year == 2017),
+    by = c("code_amc")
+  )
+```
+
+```{r}
+st_bbox(amc_1991_2022)
+```
+
+## a. Aboveground Carbon Biomass
+
+```{r}
+biomass_map <- ggplot() +
+  geom_sf(
+    data = biomass_map_data,
+    aes(fill = biomass_density),  
+    color = NA,
+    alpha = 0.9
+  ) +
+  # Add outline
+  geom_sf(
+    data = brazil, 
+    color = "grey75",
+    fill = NA
+  ) +
+  coord_sf(
+    xlim = c(-73, -35.5)
+  ) +
+  # Apply the color scale
+  scale_fill_viridis_c(
+    option = "cividis",
+    direction = 1
+  ) + 
+  # Adjust themes for cleaner appearance
+  theme_minimal(
+    base_family = "LM Sans 10"
+  ) +
+  theme(
+    plot.title = element_text(size = 11.5, hjust = 0.5),
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    legend.key.width = rel(0.1),
+    legend.key.height = rel(0.5),
+    legend.text = element_text(size = rel(0.5), color = "grey30"),
+    legend.title = element_blank()
+  ) +
+  ggtitle("a. Carbon Biomass")
+
+#biomass_map
+```
+
+## b. Pasture Suitability
+
+```{r}
+si_map <- ggplot() +
+  geom_sf(
+    data = si_map_data,
+    aes(fill = si_median),  
+    color = NA,
+    alpha = 0.9
+  ) +
+  # Add outline
+  geom_sf(
+    data = brazil, 
+    color = "grey75",
+    fill = NA
+  ) +
+  coord_sf(
+    xlim = c(-73, -35.5)
+  ) +
+  # Apply the color scale
+  scale_fill_viridis_c(
+    option = "cividis",
+    direction = 1
+  ) + 
+  # Adjust themes for cleaner appearance
+  theme_minimal(
+    base_family = "LM Sans 10"
+  ) +
+  theme(
+    plot.title = element_text(size = 11.5, hjust = 0.5),
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    legend.key.width = rel(0.1),
+    legend.key.height = rel(0.5),
+    legend.text = element_text(size = rel(0.5), color = "grey30"),
+    legend.title = element_blank()
+  ) +
+  ggtitle("b. Pasture Suitability")
+
+#si_map
+```
+
+## c. High-quality Pastures
+
+```{r}
+high_share_map <- ggplot() +
+  geom_sf(
+    data = high_share_map_data,
+    aes(fill = high_share),  
+    color = NA,
+    alpha = 0.9
+  ) +
+  # Add outline
+  geom_sf(
+    data = brazil, 
+    color = "grey75",
+    fill = NA
+  ) +
+  coord_sf(
+    xlim = c(-73, -35.5)
+  ) +
+  # Apply the color scale
+  scale_fill_viridis_c(
+    option = "cividis",
+    direction = 1,
+    labels = scales::percent_format(accuracy = 1)
+  ) + 
+  # Adjust themes for cleaner appearance
+  theme_minimal(
+    base_family = "LM Sans 10"
+  ) +
+  theme(
+    plot.title = element_text(size = 11.5, hjust = 0.5),
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    legend.key.width = rel(0.1),
+    legend.key.height = rel(0.5),
+    legend.text = element_text(size = rel(0.5), color = "grey30"),
+    legend.title = element_blank()
+  ) +
+  ggtitle("c. High-quality Pastures")
+
+#high_share_map
+```
+
+## d. Prices
+
+```{r}
+price_map <- ggplot() +
+  geom_sf(
+    data = price_map_data,
+    aes(fill = local_price),  
+    color = NA,
+    alpha = 0.9
+  ) +
+  # Add outline
+  geom_sf(
+    data = brazil, 
+    color = "grey75",
+    fill = NA
+  ) +
+  coord_sf(
+    xlim = c(-73, -35.5)
+  ) +
+  # Apply the color scale
+  scale_fill_viridis_c(
+    option = "cividis",
+    direction = 1
+  ) + 
+  # Adjust themes for cleaner appearance
+  theme_minimal(
+    base_family = "LM Sans 10"
+  ) +
+  theme(
+    plot.title = element_text(size = 11.5, hjust = 0.5),
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    legend.key.width = rel(0.1),
+    legend.key.height = rel(0.5),
+    legend.text = element_text(size = rel(0.5), color = "grey30"),
+    legend.title = element_blank()
+  ) +
+  ggtitle("d. Prices")
+
+#price_map
+```
+
+
+## e. Cattle Herd
+
+```{r}
+cattle_map <- ggplot() +
+  geom_sf(
+    data = cattle_map_data,
+    aes(fill = cattle_heads_big),  
+    color = NA, 
+    alpha = 0.9
+  ) +
+  # Add outline
+  geom_sf(
+    data = brazil, 
+    color = "grey75",
+    fill = NA
+  ) +
+  coord_sf(
+    xlim = c(-73, -35.5)
+  ) +
+  # Apply the color scale
+  scale_fill_viridis_c(
+    option = "cividis",
+    direction = 1,
+    trans = "log10",
+    oob = scales::squish_infinite
+  ) + 
+  # Adjust themes for cleaner appearance
+  theme_minimal(
+    base_family = "LM Sans 10"
+  ) +
+  theme(
+    plot.title = element_text(size = 11.5, hjust = 0.5),
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    legend.key.width = rel(0.1),
+    legend.key.height = rel(0.5),
+    legend.text = element_text(size = rel(0.5), color = "grey30"),
+    legend.title = element_blank()
+  ) +
+  ggtitle("e. Cattle Herd")
+
+#cattle_map
+```
+
+## f. Natural to pasture
+
+```{r}
+conversion_map <- ggplot() +
+  geom_sf(
+    data = conversion_map_data,
+    aes(fill = conversion),  
+    color = NA,
+    alpha = 0.9
+  ) +
+  # Add outline
+  geom_sf(
+    data = brazil, 
+    color = "grey75",
+    fill = NA
+  ) +
+  coord_sf(
+    xlim = c(-73, -35.5)
+  ) +
+  # Apply the color scale
+  scale_fill_viridis_c(
+    option = "cividis",
+    direction = 1,
+    trans = "log10",
+    oob = scales::squish_infinite,
+    labels = scales::number_format(accuracy = 1)
+  ) + 
+  # Adjust themes for cleaner appearance
+  theme_minimal(
+    base_family = "LM Sans 10"
+  ) +
+  theme(
+    plot.title = element_text(size = 11.5, hjust = 0.5),
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = NA, color = NA),
+    legend.key.width = rel(0.1),
+    legend.key.height = rel(0.5),
+    legend.text = element_text(size = rel(0.5), color = "grey30"),
+    legend.title = element_blank()
+  ) +
+  ggtitle("f. Land Conversion")
+
+#conversion_map
+```
+
+## Aggregation
+
+```{r}
+agg_map <- wrap_plots(
+    ncol = 2,
+    biomass_map, si_map,
+    high_share_map, price_map,
+    cattle_map, conversion_map)
+```
+
+```{r}
+dev.new(width = 7, height = 10.5)
+#agg_map
+```
+
+```{r}
+ggsave(
+  filename = "../Outputs/Graphics/agg_map.png", # Path to save the file
+  plot = agg_map,                              # The patchwork object
+  width = 7,                                   # Width in inches
+  height = 10.5,                               # Height in inches
+  units = "in",                                # Units for width/height
+  dpi = 300,                                   # Resolution (DPI for high-quality output)
+  bg = "white"                                 # Background colour
+)
+```
+
+
+# Plots
+
+## CF - Abatement decomposition
+
+```{r}
+decomposition_plot <- recovery_results |> 
+  select(
+    i,
+    co2_disincentive_pc,
+    co2_incentive_pc,
+    co2_net_pc
+  ) |> 
+  pivot_longer(
+    cols = c(
+      co2_disincentive_pc, 
+      co2_incentive_pc,
+      co2_net_pc),
+    names_to = "effect",
+    values_to = "abatement",
+    names_prefix = "co2_",
+  ) |> 
+  mutate(
+    facet = if_else(
+      effect == "net_pc",
+      "Net Abatement",
+      "Decomposition"
+    ),
+    effect = factor(effect, 
+                    levels = c("disincentive_pc", "incentive_pc", "net_pc"),
+                    labels = c("Borlaug effect", "Jevons effect", "Net impact"))
+  ) |> 
+  ggplot() +
+  aes(
+    x = i,  # Keep raw values, format axes with scales
+    y = abatement,  # Keep raw values, format axes with scales
+    fill = effect
+  ) +
+  geom_area(
+    alpha = 0.7, 
+    colour = NA  # No border for the areas
+  ) +
+  facet_grid(
+    cols = vars(facet),
+    scales = "fixed",
+    labeller = as_labeller(c("Decomposition" = "a. Decomposed", "Net Abatement" = "b. Aggregated"))
+  ) +
+  labs(
+    x = "High-Quality Pastures (%)",
+    y = expression("CO"[2]~ "Abatement (%)")
+  ) +
+  theme_minimal(
+    base_size = 12,
+    base_family = "LM Sans 10"
+    ) +
+  theme(
+    axis.line = element_line(color = "grey40"),
+    axis.title.x = element_text( size = 10, margin = margin(t = 10)),
+    axis.title.y = element_text( size = 10, margin = margin(r = 5)),
+    axis.text = element_text( size = 9),
+    legend.text = element_text( size = 9),
+    legend.position = "bottom",
+    legend.title = element_blank(),  # Remove legend title
+    strip.text = element_text( size = 11.5, face = "plain"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank()
+    ) +
+  scale_fill_manual(
+    values = c("Borlaug effect" = "grey70",
+               "Jevons effect" = "grey50",
+               "Net impact" = "grey30")
+  ) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +  # Format x-axis as percentages
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))   # Format y-axis as percentages
+```
+
+```{r}
+ggsave(
+  filename = "../Outputs/Graphics/decomposition_plot.png", # Path to save the file
+  plot = decomposition_plot,                  
+  width = 9,                                   # Width in inches
+  height = 5.5,                               # Height in inches
+  units = "in",                                # Units for width/height
+  dpi = 300,                                   # Resolution (DPI for high-quality output)
+  bg = "white"                                 # Background colour
+  )
+```
+
+## CF - Deforestation decomposition
+
+```{r}
+decomposition_def_plot <- recovery_results |> 
+  select(
+    i,
+    sav_disincentive_pc,
+    sav_incentive_pc,
+    sav_net_pc
+  ) |> 
+  pivot_longer(
+    cols = c(
+      sav_disincentive_pc, 
+      sav_incentive_pc,
+      sav_net_pc),
+    names_to = "effect",
+    values_to = "saved",
+    names_prefix = "sav_",
+  ) |> 
+  mutate(
+    facet = if_else(
+      effect == "net_pc",
+      "Net",
+      "Decomposition"
+    ),
+    effect = factor(effect, 
+                    levels = c("disincentive_pc", "incentive_pc", "net_pc"),
+                    labels = c("Borlaug effect", "Jevons effect", "Net impact"))
+  ) |> 
+  ggplot() +
+  aes(
+    x = i,  # Keep raw values, format axes with scales
+    y = saved,  # Keep raw values, format axes with scales
+    fill = effect
+  ) +
+  geom_area(
+    alpha = 0.7, 
+    colour = NA  # No border for the areas
+  ) +
+  facet_grid(
+    cols = vars(facet),
+    scales = "fixed",
+    labeller = as_labeller(c("Decomposition" = "a. Decomposed", "Net" = "b. Aggregated"))
+  ) +
+  labs(
+    x = "High-Quality Pastures (%)",
+    y = "Prevented conversion (%)"
+  ) +
+  theme_minimal(
+    base_size = 12,
+    base_family = "LM Sans 10"
+    ) +
+  theme(
+    axis.line = element_line(color = "grey40"),
+    axis.title.x = element_text( size = 10, margin = margin(t = 10)),
+    axis.title.y = element_text( size = 10, margin = margin(r = 5)),
+    axis.text = element_text( size = 9),
+    legend.text = element_text( size = 9),
+    legend.position = "bottom",
+    legend.title = element_blank(),  # Remove legend title
+    strip.text = element_text( size = 11.5, face = "plain"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank()
+    ) +
+  scale_fill_manual(
+    values = c("Borlaug effect" = "grey70",
+               "Jevons effect" = "grey50",
+               "Net impact" = "grey30")
+  ) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +  # Format x-axis as percentages
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))   # Format y-axis as percentages
+```
+
+```{r}
+ggsave(
+  filename = "../Outputs/Graphics/decomposition_def_plot.png", # Path to save the file
+  plot = decomposition_def_plot,                  
+  width = 9,                                   # Width in inches
+  height = 5.5,                               # Height in inches
+  units = "in",                                # Units for width/height
+  dpi = 300,                                   # Resolution (DPI for high-quality output)
+  bg = "white"                                 # Background colour
+  )
+```
+
+
+## CF - Taxes vs recovery
+
+```{r}
+# Define the recovery plot
+recovery_plot <- recovery_results |> 
+  ggplot() +
+  aes(
+    x = i, 
+    y = effective
+  ) +
+  geom_area(
+    fill = "grey20",
+    alpha = 0.7, 
+    colour = NA
+    ) +
+  labs(
+    x = "High-quality pastures (%)",
+    y = bquote("Converted Area ("~10^4~km^2 ~ ")")
+  ) +
+  theme_minimal(
+    base_size = 12, 
+    base_family = "LM Sans 10"
+    ) +
+  theme(
+    plot.title = element_text(size = 11.5, hjust = 0.5),
+    axis.line = element_line(color = "grey40"),
+    axis.text = element_text(size = 9),
+    axis.title.x = element_text(size = 10, margin = margin(t = 10)),
+    axis.title.y = element_text(size = 10, margin = margin(r = 5)),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    legend.position = "none"
+    ) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_y_continuous(labels = scales::number_format(accuracy = 1)) +
+  ggtitle("a. Pasture Recovery")
+
+# Define the carbon tax plot
+tax_plot <- tax_results |> 
+  filter(t <= 5) |> 
+  ggplot() +
+  aes(
+    x = t, 
+    y = tax
+  ) +
+  geom_area(
+    fill = "grey60",
+    alpha = 0.7, 
+    colour = NA
+    ) +
+  labs(
+    x = expression("Tax rate ($/tCO"[2]~")"),
+    y = NULL
+  ) +
+  theme_minimal(base_size = 12, base_family = "LM Sans 10") +
+  theme(
+    plot.title = element_text(size = 11.5, hjust = 0.5),
+    axis.line.x = element_line(color = "grey40"),
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.x = element_text(size = 9),
+    axis.text.y = element_blank(),
+    axis.title.x = element_text(size = 10, margin = margin(t = 10)),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    legend.position = "none"
+  ) +
+  scale_x_continuous(labels = scales::number_format(accuracy = 1)) +
+  scale_y_continuous(labels = scales::number_format(accuracy = 1)) +
+  ggtitle("b. Carbon Tax")
+
+# Combine the plots using patchwork
+comparison_plot <- recovery_plot + tax_plot
+```
+
+```{r}
+ggsave(
+  filename = "../Outputs/Graphics/comparison_plot.png", # Path to save the file
+  plot = comparison_plot,                  
+  width = 9,                                   # Width in inches
+  height = 5.5,                               # Height in inches
+  units = "in",                                # Units for width/height
+  dpi = 300,                                   # Resolution (DPI for high-quality output)
+  bg = "white"                                 # Background colour
+  )
+```
+
+## CF - Taxes
+
+```{r}
+# Adjusted Emissions Curve
+curve_co2 <- tax_results |> 
+  filter(t <= 66) |> 
+  ggplot() +
+  aes(
+    x = tax_co2,
+    y = t
+  ) +
+  geom_line(
+    linewidth = 0.75,
+    color = "grey35"
+  ) +
+  labs(
+    x = expression("Emissions (Gt CO"[2]~")"),
+    y = expression("Tax rate ($/tCO"[2]~")")
+  ) +
+  theme_minimal(
+    base_size = 12,
+    base_family = "LM Sans 10"
+  ) +
+  theme(
+    aspect.ratio = 1,
+    plot.title = element_text(size = 11.5, hjust = 0.5),
+    axis.line = element_line(color = "grey40"),
+    axis.text = element_text(size = 9),
+    axis.title.x = element_text(size = 10, margin = margin(t = 10)),
+    axis.title.y = element_text(size = 10, margin = margin(r = 5)),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    legend.position = "none"
+  ) +
+  scale_x_continuous(labels = scales::number_format(accuracy = 0.1)) +
+  scale_y_continuous(labels = scales::number_format(accuracy = 1)) +
+  ggtitle("a. Carbon Emissions")
+
+# Adjusted Avoided Deforestation Curve
+curve_sav <- tax_results |> 
+  filter(t <= 66) |> 
+  ggplot() +
+  aes(
+    x = sav_tax,
+    y = t
+  ) +
+  geom_line(
+    linewidth = 0.75,
+    color = "grey35"
+  ) +
+  labs(
+    x = bquote("Area ("~10^4~km^2 ~ ")"),
+    y = expression("Tax rate ($/tCO"[2]~")")
+  ) +
+  theme_minimal(
+    base_size = 12,
+    base_family = "LM Sans 10"
+  ) +
+  theme(
+    aspect.ratio = 1,
+    plot.title = element_text(size = 11.5, hjust = 0.5),
+    axis.line = element_line(color = "grey40"),
+    axis.text = element_text(size = 9),
+    axis.title.x = element_text(size = 10, margin = margin(t = 10)),
+    axis.title.y = element_text(size = 10, margin = margin(r = 5)),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    legend.position = "none"
+  ) +
+  scale_x_continuous(labels = scales::number_format(accuracy = 1)) +
+  scale_y_continuous(labels = scales::number_format(accuracy = 1)) +
+  ggtitle("b. Prevented Conversion")
+  
+
+# Combine the plots
+tax_plot <- curve_sav + curve_co2
+```
+```{r}
+ggsave(
+  filename = "../Outputs/Graphics/tax_plot.png", # Path to save the file
+  plot = tax_plot,                  
+  width = 9,                                   # Width in inches
+  height = 5.5,                               # Height in inches
+  units = "in",                                # Units for width/height
+  dpi = 300,                                   # Resolution (DPI for high-quality output)
+  bg = "white"                                 # Background colour
+  )
+```
+
+# Notes
+
+Exchange
+2019	3.9445
+2022	5.1642
+
+IPCA
+2019    5320.25
+2022    6474.09
+
+SCC (2019 US$)
+66.00
+
+Annuity/perpetuity equivalent
+6.60 (2019 US$)
+26.0337 (2019 R$)
+31.67981 (2022 R$)
+
+
+# Tables
+
+## Intensive margin
+
+```{r}
+get_f_stats <- function(model) {
+  map(
+    list(
+      `F (2nd stage)` = fixest::fitstat(model, "f")$f$stat,
+      `F (1st stage: local_price)` = fixest::fitstat(model, "ivf")$`ivf1::local_price`$stat,
+      `F (1st stage: local_price_2)` = fixest::fitstat(model, "ivf")$`ivf1::local_price_2`$stat,
+      `F (1st stage: high_share)` = fixest::fitstat(model, "ivf")$`ivf1::high_share`$stat),
+    
+    \(x) round(x, 4)
+  )
+}
+
+# Rename coefficients
+coef_rename <- c(
+  "fit_local_price" = "$p_{mt}$",
+  "fit_local_price_2" = "$p_{mt+1}$",
+  "fit_high_share" = "Pasture Quality ($x_{mt+1}$)",
+  "year" = "Year"
+)
+
+# Add model parameters as an extra column
+model_parameters <- data.frame(
+  "Parameters" = c(
+  "$-\\dfrac{\\alpha_p}{\\delta \\beta}$", "",
+  "$\\dfrac{\\alpha_p (1 + \\phi)}{\\delta}$", "",
+  "$-\\dfrac{\\gamma_{pasture}}{\\delta}$", "",
+  "$-\\dfrac{\\gamma_t}{\\delta}$")
+)
+
+# Add controls, fixed effects, and F-statistics as extra rows
+extra_rows <- data.frame(
+  rowname = c("Controls", 
+              "Fixed Effects", 
+              "F (2nd stage)", 
+              "F (1st stage: $p_{mt}$)", 
+              "F (1st stage: $p_{mt+1}$)", 
+              "F (1st stage: Past. Qual.)", 
+              "Clustered SE"),
+  value = c(
+    "Temp.; Past.Suit.; Mkt.Acc.; Transp.Cost.", 
+    "Biome", 
+    get_f_stats(int_mod)[["F (2nd stage)"]], 
+    get_f_stats(int_mod)[["F (1st stage: local_price)"]], 
+    get_f_stats(int_mod)[["F (1st stage: local_price_2)"]], 
+    get_f_stats(int_mod)[["F (1st stage: high_share)"]], 
+    "Yes (Municipality)"),
+  mod_par = ""
+  )
+
+# Name a model list dynamically 
+header = paste0("\\toprule", 
+                "$h_{mt+1}$")
+
+model_list = setNames(list(int_mod), header)
+
+
+# Create the table
+modelsummary(
+  model_list,
+  coef_map = coef_rename,
+  gof_map = "nobs",
+  fmt = 4, 
+  statistic = "{std.error}", 
+  stars = c("***"=0.01, "**"=0.05, "*"=0.10), 
+  add_rows = extra_rows,
+  title = "Intensive Margin IV Regression Results\\label{tab:main_int}",
+  notes = paste(
+    "\\footnotesize",
+    "Standard errors clustered at the municipality level.",
+    "Biome fixed effects.",
+    "Controls: Pasture suitability, market access, transportation cost,
+      average minimum and average maximum temperatures.",
+    "Shift-share variables used as instruments for prices.",
+    "Palmer drought severity index (PDSI) used as instrument for pasture quality."
+  ),
+  add_columns = model_parameters,
+  output = "tinytable",
+  escape = FALSE,
+  width = 0.9
+  ) |>
+  style_tt(
+    tabularray_inner = "
+      row{1} = {valign = m},
+      row{2,4,6,8} = {abovesep = 5pt, belowsep = -7pt},
+      column{3} = {valign = b}
+      "
+    ) |>
+  style_tt(
+    fontsize = 1
+    ) |> 
+  save_tt(
+    output = "../Outputs/Tables/main_int_table.tex",
+    overwrite = T
+  )
+
+remove(get_f_stats, coef_rename, model_parameters, extra_rows)
+```
+
+
+## Extensive margin
+
+```{r}
+get_f_stats <- function(model) {
+  map(
+    list(
+      `F (2nd stage)` = fixest::fitstat(model, "f")$f$stat,
+      `F (1st stage: high_share_tdif)` = fixest::fitstat(model, "ivf")$`ivf1::high_share_tdif`$stat),
+    
+    \(x) round(x, 4)
+    )
+}
+
+# Rename coefficients
+coef_rename <- c(
+  "x2" = "$\\frac{\\beta}{2}(h_{mt+1})^2$",
+  "fit_high_share_tdif" = "Pasture Quality ($\\beta x_{mt+1} - x_{mt})$",
+  "biomass_density" = "$b_m$",
+  "year_tdif" = "$(\\beta + (\\beta - 1) t)$"
+)
+
+# Add model parameters as an extra column
+model_parameters <- data.frame(
+  "Parameters" = c(
+  "$\\delta$", "",
+  "$\\gamma_{pasture}^e$", "",
+  "$-\\alpha_b$", "",
+  "$\\gamma_t^e$")
+)
+
+# Add controls, and F-statistics as extra rows
+extra_rows <- data.frame(
+  rowname = c("Controls", 
+              "F (2nd stage)", 
+              "F (1st stage: Past. Qual.)",
+              "Clustered SE"),
+  value = c(
+    "Temp.; Past.Suit.; Mkt.Acc.; Transp.Cost.",
+    get_f_stats(ext_mod)[["F (2nd stage)"]],
+    get_f_stats(ext_mod)[["F (1st stage: high_share_tdif)"]], 
+    "Yes (Municipality)"),
+  mod_par = ""
+  )
+
+# Name a model list dynamically 
+header = paste0(
+  "\\toprule",
+  "$ \\log \\left( \\frac{\\rho_{mt}}{1 - \\rho_{mt}} \\right)
+    -\\beta \\log ( \\rho_{mt+1} ) + \\beta \\gamma $") 
+
+model_list = setNames(list(ext_mod), header)
+
+# Create the table
+modelsummary(
+  model_list,
+  coef_map = coef_rename,
+  gof_map = "nobs",
+  fmt = 4, 
+  statistic = "({std.error})", 
+  stars = c("***"=0.01, "**"=0.05, "*"=0.10), 
+  add_rows = extra_rows,
+  title = "Extensive Margin IV Regression Results\\label{tab:main_ext}",
+  notes = paste(
+    "\\footnotesize",
+    "Standard errors clustered at the municipality level.",
+    "Controls: Pasture suitability, market access, transportation cost,
+      average minimum and average maximum temperatures.", 
+    "All time varying controls have been calculated as an inter-temporal 
+      difference of the form $\\beta x_{mt+1}-x_{mt}$.",
+    "Palmer Drought Severity Index (PDSI) used as instrument for the intertemporal difference in pasture quality."
+    ),
+  add_columns = model_parameters,
+  output = "tinytable",
+  escape = FALSE,
+  width = 0.9
+    ) |>
+  style_tt(
+    tabularray_inner = "
+      rowsep = 4pt,
+      row{1} = {valign = m},
+      row{2,4,6,8} = {abovesep = 5pt, belowsep = -5pt}
+      "
+    ) |> 
+  save_tt(
+    output = "../Outputs/Tables/main_ext_table.tex",
+    overwrite = T
+  )
+
+remove(get_f_stats, coef_rename, model_parameters, extra_rows, header, model_list)
+```
+
+
+## Structural parameters
+
+In this section, I will use the preferred empirical exercise to recover the structural parameters that arise from the model.I first define a function to calculate the structural parameters, then run and export as latex table.
+
+```{r} 
+calculate_structural_params(int_mod, ext_mod) |>
+  kbl(
+    digits = c(4,4,2),
+    
+    # configure header
+    col.names = c(
+      paste0("\\hline", "\\addlinespace ",
+        "Parameter"),
+      "Value", 
+      paste0("Scaled by $\\alpha_p$ (R\\$)",
+             "\\vspace{0.4em}")
+      ),
+    
+    booktabs = T,
+    label = "tab:str_param",
+    caption = "Structural Parameters",
+    format = "latex",
+    escape = FALSE,
+    linesep = "\\addlinespace"
+  ) |>
+  kable_styling(
+    full_width = T,
+    htmltable_class =  "lightable-classic-2"
+  ) |> 
+  pack_rows("Intensive margin cost factors", 5, 12, latex_gap_space = "1em") |> 
+  pack_rows("Extensive margin cost factors", 13, 20, latex_gap_space = "1em") |> 
+  save_kable("../Outputs/Tables/str_param_table.tex")
+```
+
+## Extra tables
+
+### First stage intensive margin
+
+```{r}
+coef_rename <- c(
+  local_price = "$p_{mt}$",
+  local_price_2 = "$p_{mt+1}$",
+  high_share = "Pasture Quality ($x_{mt+1}$)",
+  high_share_tdif = "Pasture Quality ($\\beta x_{mt+1} - x_{mt}$)",
+  year = "Year",
+  year_tdif = "$(\\beta + (\\beta - 1) t)$",
+  ssiv = "$ssiv_{mt}$",
+  ssiv_2 = "$ssiv_{mt+1}$",
+  pr = "Lag Precip",
+  code_amc = "Municipality",
+  main_biome = "Biome",
+  biomass_density = "$b_m$",
+  mata_atlantica = "mata atlantica",
+  y = "$ \\log \\left( \\frac{\\rho_{mt}}{1 - \\rho_{mt}} \\right) -\\beta \\log ( \\rho_{mt+1} ) + \\beta \\gamma $ \\vspace{1ex}",
+  x2 = "$\\frac{\\beta}{2}(h_{mt+1})^2$",
+  h = "$h_{mt+1}$"
+  )
+
+etable(
+    int_mod,
+    stage = 1,
+    digits = 4,
+    fitstat = ~ n + f + ivf,
+    group = list(
+      Temperature = c("tmmn_min", "tmmx_max", "tmmn_mean", "tmmx_mean"),
+      `Past. Suit.` = "si_median",
+      `Mkt. Acc.` = "ma_norm",
+      `Transp. Cost` = "tc_median"
+      ),
+    dict = coef_rename,
+    # output
+    file = "../Outputs/Tables/int_first_stage.tex",
+    replace = T,
+    # latex configurations
+    label = "tab:int_first_stage",
+    tabular = "X",
+    style.tex = style.tex(
+      model.title = "",
+      yesNo = "$\\checkmark$",
+      fontsize = "normalsize",
+      model.format = "\\hspace{1em}"
+      ),
+    title = "Intensive margin first stage results"
+    )
+```
+
+### First stage extensive margin
+
+```{r}
+coef_rename <- c(
+  local_price = "$p_{mt}$",
+  local_price_2 = "$p_{mt+1}$",
+  high_share = "Pasture Quality ($x_{mt+1}$)",
+  high_share_tdif = "Pasture Quality ($\\beta x_{mt+1} - x_{mt}$)",
+  year = "Year",
+  year_tdif = "$(\\beta + (\\beta - 1) t)$",
+  ssiv = "$ssiv_{mt}$",
+  ssiv_2 = "$ssiv_{mt+1}$",
+  pr = "Lag Precip",
+  code_amc = "Municipality",
+  main_biome = "Biome",
+  biomass_density = "$b_m$",
+  mata_atlantica = "mata atlantica",
+  y = "$ \\log \\left( \\frac{\\rho_{mt}}{1 - \\rho_{mt}} \\right) -\\beta \\log ( \\rho_{mt+1} ) + \\beta \\gamma $ \\vspace{1ex}",
+  x2 = "$\\frac{\\beta}{2}(h_{mt+1})^2$",
+  h = "$h_{mt+1}$"
+  )
+
+etable(
+    ext_mod,
+    stage = 1,
+    digits = 4,
+    fitstat = ~ n + f + ivf,
+    group = list(
+      Temperature = c("tmmn_min", "tmmx_max", "tmmn_mean", "tmmx_mean"),
+      `Past. Suit.` = "si_median",
+      `Mkt. Acc.` = "ma_norm",
+      `Transp. Cost` = "tc_median"
+      ),
+    dict = coef_rename,
+    # output
+    file = "../Outputs/Tables/ext_first_stage.tex",
+    replace = T,
+    # latex configurations
+    label = "tab:ext_first_stage",
+    tabular = "X",
+    style.tex = style.tex(
+      model.title = "",
+      yesNo = "$\\checkmark$",
+      fontsize = "normalsize",
+      model.format = "\\hspace{1em}"
+      ),
+    title = "Extensive margin first stage results"
+    )
+```
+
+### Fixed efects intensive margin
+
+```{r}
+etable(
+    list(
+      OLS = ols[[4]], 
+      IV = iv[[4]]
+    ),
+    stage = 2,
+    digits = 4,
+    fitstat = ~ n + f,
+    group = list(
+      Temperature = c("tmmn_min", "tmmx_max", "tmmn_mean", "tmmx_mean"),
+      `Past. Suit.` = "si_median",
+      `Mkt. Acc.` = "ma_norm",
+      `Transp. Cost` = "tc_median"
+      ),
+    dict = coef_rename,
+    # output
+    file = "../Outputs/Tables/int_fe.tex",
+    replace = T,
+    # latex configurations
+    label = "tab:int_fe",
+    tabular = "X",
+    style.tex = style.tex(
+      model.title = "",
+      yesNo = c("$\\checkmark$", ""),
+      fontsize = "normalsize",
+      model.format = "\\hspace{1em}"
+      ),
+    title = "Intensive margin FE regression results",
+    headers = c("OLS", "IV")
+    )
+```
+
+### PPM data for extensive margin
+
+```{r}
+etable(
+  list(
+    OLS = ppm_ols[[2]], 
+    IV = ppm_iv[[2]]
+    ),
+  fitstat = ~ n + f,
+  digits = 4,
+  group = list(
+      Temperature = c("tmmn_min", "tmmx_max", "tmmn_mean", "tmmx_mean"),
+      `Past. Suit.` = "si_median",
+      `Mkt. Acc.` = "ma_norm",
+      `Transp. Cost.` = "tc_median"
+      ),
+  dict = coef_rename,
+  # output
+  file = "../Outputs/Tables/ext_ppm.tex",
+  replace = T,
+  
+  # latex configurations
+  label = "tab:ext_ppm",
+  tabular = "X",
+  style.tex = style.tex(
+    model.title = "",
+    yesNo = "$\\checkmark$",
+    fontsize = "normalsize",
+    model.format = "\\hspace{1em}"
+    ),
+  title = "Extensive margin regression with survey data",
+  headers = c("OLS", "IV")
+  )
+```
+
+## Baseline
+
+```{r}
+baseline_results |> 
+  mutate(
+    variable = c("Land conversion ($10^4 km^2$)", "Carbon emissions (Gt $CO_2$)")
+  ) |>
+  kbl(
+    col.names = c(
+      "Variable",
+      "Predicted",
+      "Observed",
+      "Relative error"
+    ),
+    caption = "Baseline scenario",
+    booktabs = TRUE,
+    label = "baseline",
+    digits = 4,
+    format = "latex",
+    escape = FALSE,
+    linesep = "\\addlinespace"
+  ) |> 
+  kable_styling(
+    htmltable_class =  "lightable-classic-2",
+    #full_width = TRUE
+    #latex_options = "scale_down"
+  ) %>%
+  # Add double lines
+  sub(
+    pattern = "\\\\toprule", 
+    replacement = "\\\\midrule\\\\midrule",
+    x = .
+  ) |> 
+  save_kable("../Outputs/Tables/baseline.tex")
+```
+
+
+## Policy counterfactual table
+
+```{r}
+# Format pasture recovery results
+recovery_summary <- recovery_results |> 
+  select(i, sav_net, sav_net_pc, co2_net, co2_net_pc) |> 
+  filter(i %in% seq(0.25, 1, 0.25)) |> 
+  mutate(
+    i = paste0(i * 100, "\\%"),
+    sav_net_pc = scales::percent(sav_net_pc, accuracy = 0.1) |> 
+                 stringr::str_replace("%", "\\\\%"),
+    co2_net_pc = scales::percent(co2_net_pc, accuracy = 0.1) |> 
+                 stringr::str_replace("%", "\\\\%")
+  )
+
+# Format tax results
+tax_summary <- tax_results |> 
+  select(t, sav_tax, sav_tax_pc, co2_tax, co2_tax_pc) |> 
+  filter(t %in% c(0.5, 1, 2, 5, 10, 20, 66)) |> 
+  mutate(
+    t = paste0("\\$", t),
+    sav_tax_pc = scales::percent(sav_tax_pc, accuracy = 0.1) |> 
+                 stringr::str_replace("%", "\\\\%"),
+    co2_tax_pc = scales::percent(co2_tax_pc, accuracy = 0.1) |> 
+                 stringr::str_replace("%", "\\\\%")
+  )
+
+
+# Rename columns
+colnames(recovery_summary) <- c("i", "sav", "sav_pc", "co2", "co2_pc")
+colnames(tax_summary) <- c("i", "sav", "sav_pc", "co2", "co2_pc")
+
+# Combine the data
+policy_summary <- bind_rows(recovery_summary, tax_summary)
+
+# Create the table
+policy_summary |> 
+  kbl(
+    col.names = c(
+      "Policy",
+      "Area ($10^4 km^2$)",
+      "vs. Baseline (\\%)",
+      "Volume (Gt $CO_2$)",
+      "vs. Baseline (\\%)"
+    ),
+    caption = "Summary of prevented land conversion and $CO_2$ emissions in policy counterfactuals",
+    align = "lrrrr",
+    booktabs = TRUE,
+    label = "policy_summary",
+    digits = c(NA, 2, 1, 2, 1),
+    format = "latex",
+    escape = FALSE,
+    linesep = "\\addlinespace"
+  ) |> 
+  add_header_above(
+    c(" " = 1, "Prevented Land Conversion" = 2, "Prevented $CO_2$ Emissions" = 2),
+    escape = FALSE
+    ) |> 
+  kable_styling(
+    htmltable_class =  "lightable-classic-2",
+    #full_width = TRUE
+    latex_options = "scale_down"
+  ) |> 
+  pack_rows("A: Pasture Recovery", 1, 4) |> 
+  pack_rows("B: Carbon Tax", 5, 11) |>
+  footnote(
+    general = "This table presents results for prevented land conversion of natural vegetation to pasture and prevented $CO_2$ emissions for different levels of pasture recovery and different rates of carbon tax. The columns (3) and (5) represent, respectively, the prevented conversions and prevented emissions with respect to baseline conversion and emission estimates.",
+    general_title = "",
+    escape = FALSE,
+    threeparttable = TRUE
+    ) %>%
+  # Add double lines
+  sub(
+    pattern = "\\\\toprule", 
+    replacement = "\\\\midrule\\\\midrule",
+    x = .
+  ) |> 
+  save_kable("../Outputs/Tables/policy_summary_table.tex")
+```
+
+# Unused content
+
+## Cattle heads
+
+```{r, eval=FALSE}
+plot_ch <- ext_ppm |> 
+  summarise(
+    ch = sum(cattle_heads),
+    .by = c(main_biome, year)
+  ) |> 
+  mutate(
+    Bioma = case_when(
+      main_biome == "amazonia" ~ "Amazônia",
+      main_biome == "caatinga" ~ "Caatinga",
+      main_biome == "cerrado" ~ "Cerrado",
+      main_biome == "mata_atlantica" ~ "Mata Atlântica",
+      main_biome == "pampa" ~ "Pampa",
+      main_biome == "pantanal" ~ "Pantanal")
+  ) |> 
+  ggplot() +
+  # Line plot with color by biome
+  geom_line(
+    aes(x = year, y = ch, color = Bioma),
+    size = 1
+  ) +
+  scale_color_manual(
+    values = c(
+      "Amazônia" = "#1b9e77", 
+      "Caatinga" = "#ffbb78",
+      "Cerrado" = "#d95f02",
+      "Mata Antlântica" = "#66b3ff",
+      "Pampa" = "#d62728",
+      "Pantanal" = "#9467bd"
+      ),
+    name = "Main Biome"
+  ) +
+  # Labels and titles
+  labs(
+    title = "Cattle Heads Over Time by Main Biome",
+    subtitle = "Regional distribution of cattle heads from 2000 to 2022",
+    x = "Year",
+    y = "Cattle Heads"
+  ) +
+  # Improved theme
+  theme_minimal() +
+  theme(
+    axis.text = element_text(color = "black")
+  )
+
+plot_ch
+#ggsave("../Outputs/Graphics/plot_ch.pdf", plot = plot_ch, device = "pdf", width = 10, height = 6)
+```
+
+## Pastures
+
+```{r, eval=FALSE}
+land_cover_agg |> 
+  left_join(
+    select(agg_census_data, c(code_amc, code_biome, main_biome)),
+    by = "code_amc"
+  ) |> 
+  summarise(
+    pasture = sum(pasture, na.rm = T),
+    .by = c(code_biome, main_biome, year)
+  ) |> 
+  mutate(
+    Bioma = case_when(
+      code_biome == 1 ~ "Amazônia",
+      code_biome == 2 ~ "Caatinga",
+      code_biome == 3 ~ "Cerrado",
+      code_biome == 4 ~ "Mata Atlântica",
+      code_biome == 5 ~ "Pampa",
+      code_biome == 6 ~ "Pantanal")
+  ) |> 
+  ggplot() +
+  # Line plot with color by biome
+  geom_line(
+    aes(x = year, y = pasture, color = Bioma),
+    linewidth = 1
+  ) +
+  scale_color_manual(
+    values = c(
+      "Amazônia" = "#1b9e77", 
+      "Caatinga" = "#ffbb78",
+      "Cerrado" = "#d95f02",
+      "Mata Antlântica" = "#66b3ff",
+      "Pampa" = "#d62728",
+      "Pantanal" = "#9467bd"
+      ),
+    name = "Main Biome"
+  ) +
+  # Labels and titles
+  labs(
+    title = "Pasture area Over Time by Main Biome",
+    subtitle = "Regional distribution of pastures from 2001 to 2020",
+    x = "Year",
+    y = "Pasture area (ha)"
+  ) +
+  # Improved theme
+  theme_minimal() +
+  theme(
+    axis.text = element_text(color = "black")
+  )
+```
