@@ -50,6 +50,8 @@ rsconnect/
 .RData
 .RData
 .RData
+
+# Ignored files that are too heavy
 Variables/baci_raw.rds
 Variables/municipalities.rds
 Variables/land_cover.rds
