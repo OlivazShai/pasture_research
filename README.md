@@ -36,7 +36,7 @@ This folder houses graphics and LaTex tables, created as outputs of the analysis
 
 ## Playground
 
-This folder houses code I developped for tests and experiments, as well as legacy versions of code I updated, revised or totaly rewrote, but kept as a reference if needed. 
+This folder houses code I developed for tests and experiments, as well as legacy versions of code I updated, revised or totaly rewrote, but kept as a reference if needed. 
 
 ## Variables
 
